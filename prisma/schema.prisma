@@ -1,0 +1,269 @@
+// CREDVAIL Database Schema Blueprint
+// Multi-Tenant Blockchain-Verified Digital Credential Infrastructure
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  PLATFORM_AUDITOR
+  USER
+}
+
+enum TenantRole {
+  ORG_OWNER
+  INSTITUTION_ADMIN
+  CERTIFICATE_ISSUER
+  TEMPLATE_DESIGNER
+  READ_ONLY_STAFF
+}
+
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  SUSPENDED
+}
+
+enum BatchStatus {
+  DRAFT
+  PROCESSING
+  GENERATED
+  ANCHORED
+  FAILED
+}
+
+enum CredentialState {
+  ISSUED
+  SUSPENDED
+  REVOKED
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  email              String             @unique
+  passwordHash       String
+  fullName           String
+  avatarUrl          String?
+  platformRole       PlatformRole       @default(USER)
+  emailVerifiedAt    DateTime?
+  twoFactorSecret    String?
+  memberships        TenantMembership[]
+  auditLogs          AuditLog[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@map("users")
+}
+
+model Tenant {
+  id                 String             @id @default(uuid())
+  slug               String             @unique
+  name               String
+  legalEntityName    String
+  websiteUrl         String
+  didUri             String             @unique
+  logoUrl            String?
+  brandingConfig     Json               @default("{}")
+  verificationStatus VerificationStatus @default(PENDING)
+  
+  memberships        TenantMembership[]
+  issuerKeys         IssuerKey[]
+  templates          CertificateTemplate[]
+  recipients         Recipient[]
+  batches            IssuanceBatch[]
+  credentials        CredentialRecord[]
+  statusSnapshots    StatusSnapshot[]
+  auditLogs          AuditLog[]
+  
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@map("tenants")
+}
+
+model TenantMembership {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  userId             String
+  role               TenantRole         @default(READ_ONLY_STAFF)
+  invitedBy          String?
+  acceptedAt         DateTime?
+  
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_memberships")
+}
+
+model IssuerKey {
+  id                  String             @id @default(uuid())
+  tenantId            String
+  keyEpoch            Int                @default(1)
+  keyIdentifier       String
+  publicKeyMultibase  String
+  algorithm           String             @default("ECDSA-P256")
+  encryptedPrivateKey String?
+  onChainTxHash       String?
+  isActive            Boolean            @default(true)
+  isCompromised       Boolean            @default(false)
+  validFrom           DateTime           @default(now())
+  validTo             DateTime?
+  revokedAt           DateTime?
+
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batches             IssuanceBatch[]
+
+  @@unique([tenantId, keyEpoch])
+  @@map("issuer_keys")
+}
+
+model CertificateTemplate {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  title              String
+  description        String?
+  category           String
+  dimensions         Json
+  layoutConfig       Json
+  backgroundImageUrl String?
+  isDefault          Boolean            @default(false)
+  
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batches            IssuanceBatch[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@map("certificate_templates")
+}
+
+model Recipient {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  fullName           String
+  email              String
+  externalIdentifier String?
+  metadata           Json               @default("{}")
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentials        CredentialRecord[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([tenantId, email])
+  @@map("recipients")
+}
+
+model IssuanceBatch {
+  id                    String              @id @default(uuid())
+  tenantId              String
+  templateId            String
+  issuerKeyId           String
+  batchNumber           String
+  merkleRoot            String?
+  leafCount             Int                 @default(0)
+  onChainTxHash         String?
+  blockchainBlockNumber BigInt?
+  status                BatchStatus         @default(DRAFT)
+  errorSummary          String?
+  
+  tenant                Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template              CertificateTemplate @relation(fields: [templateId], references: [id])
+  issuerKey             IssuerKey           @relation(fields: [issuerKeyId], references: [id])
+  credentials           CredentialRecord[]
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([tenantId, batchNumber])
+  @@map("issuance_batches")
+}
+
+model CredentialRecord {
+  id                 String             @id @default(uuid())
+  credentialId       String             @unique
+  certificateNumber  String             @unique
+  tenantId           String
+  batchId            String
+  recipientId        String
+  leafHash           String
+  merkleIndex        Int
+  bitstringIndex     Int
+  state              CredentialState    @default(ISSUED)
+  revocationReason   String?
+  revokedAt          DateTime?
+  reissuedAsId       String?
+  originalFromId     String?
+  
+  claimsData         Json
+  pdfStoragePath     String?
+  vcPayloadJson      Json
+  
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch              IssuanceBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  recipient          Recipient          @relation(fields: [recipientId], references: [id])
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([tenantId, certificateNumber])
+  @@index([tenantId, state])
+  @@map("credential_records")
+}
+
+model StatusSnapshot {
+  id                  String             @id @default(uuid())
+  tenantId            String
+  epoch               Int
+  bitstringGzipBase64 String
+  digestSha256        String
+  onChainTxHash       String?
+  anchoredAt          DateTime?
+  
+  tenant              Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  createdAt           DateTime           @default(now())
+
+  @@unique([tenantId, epoch])
+  @@map("status_snapshots")
+}
+
+model ChallengeNonce {
+  id                 String             @id @default(uuid())
+  nonce              String             @unique
+  audience           String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  createdAt          DateTime           @default(now())
+
+  @@index([nonce, expiresAt])
+  @@map("challenge_nonces")
+}
+
+model AuditLog {
+  id                 String             @id @default(uuid())
+  tenantId           String?
+  userId             String?
+  action             String
+  resourceType       String
+  resourceId         String
+  metadata           Json               @default("{}")
+  ipHash             String
+  userAgent          String?
+  createdAt          DateTime           @default(now())
+
+  tenant             Tenant?            @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  user               User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@map("audit_logs")
+}

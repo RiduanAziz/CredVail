@@ -1,0 +1,59 @@
+{
+  "metric": "M7_Adversarial_Rejection_Matrix",
+  "totalVectors": 10,
+  "vectorsRebuffed": 10,
+  "rejectionRatePercentage": 100,
+  "hypothesis_H3_Status": "CONFIRMED",
+  "vectors": [
+    {
+      "id": "SEC-01",
+      "name": "Claim Mutation Tampering",
+      "success": true
+    },
+    {
+      "id": "SEC-02",
+      "name": "Unanchored Merkle Root Injection",
+      "success": true
+    },
+    {
+      "id": "SEC-03",
+      "name": "Revoked Credential Bypass",
+      "success": true
+    },
+    {
+      "id": "SEC-04",
+      "name": "Nonce Replay Attack",
+      "success": true
+    },
+    {
+      "id": "SEC-05",
+      "name": "Audience Domain Spoofing",
+      "success": true
+    },
+    {
+      "id": "SEC-06",
+      "name": "Cross-Tenant Privilege Escalation",
+      "success": true
+    },
+    {
+      "id": "SEC-07",
+      "name": "CSV/XLSX Formula Injection",
+      "success": true
+    },
+    {
+      "id": "SEC-08",
+      "name": "Stale Status Snapshot Beyond TTL",
+      "success": true
+    },
+    {
+      "id": "SEC-09",
+      "name": "Compromised Key Epoch Invalidation",
+      "success": true
+    },
+    {
+      "id": "SEC-10",
+      "name": "Graceful Key Rotation Evaluation",
+      "success": true
+    }
+  ]
+}
