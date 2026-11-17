@@ -252,84 +252,15 @@ test('4. Empirical Metric M1: Full Verification Latency (Median < 250ms, p95 < 6
   assert.ok(p95 < 600, `p95 latency ${p95.toFixed(2)}ms must be < 600ms`);
 });
 
-test('5. Empirical Metric M2 & Hypothesis H2: Selective Disclosure Payload Reduction (>= 40%)', async () => {
-  const tenantSlug = 'm2-org';
-  const certificateNumber = 'M2-2026-0001';
-  const recipientEmail = 'm2@m2.io';
-
-  KeyRepository.resetInMemoryStore();
-  CredentialRepository.resetInMemoryStore();
-  WalletService.resetInMemoryStore();
-  inMemoryTenantStore.clear();
-
-  const tenantRepo = new TenantRepository();
-  const tenant = await tenantRepo.createTenant({
-    slug: tenantSlug,
-    name: 'M2 Org',
-    legalEntityName: 'M2 Org Inc.',
-    websiteUrl: `https://${tenantSlug}.io`,
-    didUri: `did:web:credvail.com:tenants:${tenantSlug}`,
-    ownerUserId: 'usr_m2_owner',
-  });
-  const tenantId = tenant.id;
-
-  const initialKey = await KeyRepository.getOrCreateInitialKey(tenantId, tenant.didUri);
-  const privateKeyPem = KeyService.decryptPrivateKey(initialKey.encryptedPrivateKey);
-
-  const claims = {
-    degree_level: 'Master of Science',
-    program_name: 'Distributed Systems',
-    degreeGrade: 'Distinction',
-    honors: 'Summa Cum Laude',
-    advisor: 'Dr. Turing',
-    conferralDate: '2026-01-01',
-  };
-
-  const unsignedVc = VcService.buildUnsignedCredential({
-    credentialId: 'urn:uuid:m2-vc',
-    certificateNumber,
-    tenantDidUri: tenant.didUri,
-    tenantName: tenant.name,
-    tenantSlug,
-    recipientId: 'rec_m2',
-    recipientName: 'M2 Candidate',
-    recipientEmail,
-    claims,
-    batchId: 'batch_m2',
-    merkleIndex: 0,
-    bitstringIndex: 0,
-  });
-
-  const signedVc = VcService.signCredential(unsignedVc, privateKeyPem, `${tenant.didUri}#key-1`);
-
-  await CredentialRepository.createCredential({
-    credentialId: 'urn:uuid:m2-vc',
-    certificateNumber,
-    tenantId,
-    batchId: 'batch_m2',
-    recipientName: 'M2 Candidate',
-    recipientEmail,
-    leafHash: '0x1111111111111111111111111111111111111111111111111111111111111111',
-    merkleIndex: 0,
-    bitstringIndex: 0,
-    claimsData: claims,
-    vcPayloadJson: signedVc,
-  });
-
-  await WalletService.claimCredential({ certificateNumber, recipientEmail }, 'm2_holder');
-  const nonce = VerificationService.generateChallengeNonce(300);
-
-  const presentationResult = WalletService.createSelectivePresentation(
-    certificateNumber,
-    ['degree_level', 'program_name'],
-    nonce,
-    'verifier.org',
-    'm2_holder'
+test('5. Selective-disclosure research metric is blocked until a W3C cryptosuite is integrated', async () => {
+  const { SelectiveDisclosureEngine } = await import('../src/lib/crypto/selective-disclosure.ts');
+  assert.throws(
+    () => SelectiveDisclosureEngine.createDisclosurePackage({ degree: 'BSc' }),
+    /maintained W3C ecdsa-sd-2023 cryptosuite/i
   );
-
-  assert.ok(
-    presentationResult.wireSizeReductionPercent >= 40,
-    `Payload reduction ${presentationResult.wireSizeReductionPercent.toFixed(1)}% must be >= 40% (Hypothesis H2)`
+  assert.throws(
+    () => SelectiveDisclosureEngine.createSelectivePresentation({}),
+    /not interoperable or independently verifiable/i
   );
 });
 
