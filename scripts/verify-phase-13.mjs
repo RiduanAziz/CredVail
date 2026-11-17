@@ -419,5 +419,5 @@ test('9. Empirical Metric M6: Instant Revocation Detection Latency (< 1.0s)', as
 test('10. Legacy benchmark runner is explicitly blocked pending reproducible measurements', () => {
   const runner = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'run-benchmarks.mjs'), 'utf8');
   assert.match(runner, /BENCHMARKS_BLOCKED_PENDING_REAL_RPC_AND_END_TO_END_HARNESS/);
-  assert.match(runner, /actual transaction receipts/i);
+  assert.match(runner, /real RPC receipts/i);
 });
