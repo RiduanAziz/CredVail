@@ -416,21 +416,8 @@ test('9. Empirical Metric M6: Instant Revocation Detection Latency (< 1.0s)', as
   assert.ok(elapsedSec < 1.0, `Revocation detection latency ${elapsedSec.toFixed(3)}s must be < 1.0s`);
 });
 
-test('10. Research Artifacts Completeness & Output Integrity', async () => {
-  const { execSync } = await import('node:child_process');
-  execSync('node scripts/run-benchmarks.mjs', { stdio: 'pipe' });
-
-  const requiredArtifacts = [
-    'latency_results.json',
-    'gas_analysis.csv',
-    'throughput_matrix.json',
-    'adversarial_matrix.json',
-  ];
-
-  for (const artifact of requiredArtifacts) {
-    const artPath = path.join(RESULTS_DIR, artifact);
-    assert.ok(fs.existsSync(artPath), `Research artifact missing: ${artifact}`);
-    const stat = fs.statSync(artPath);
-    assert.ok(stat.size > 50, `Research artifact ${artifact} is unexpectedly empty`);
-  }
+test('10. Legacy benchmark runner is explicitly blocked pending reproducible measurements', () => {
+  const runner = fs.readFileSync(path.join(ROOT_DIR, 'scripts', 'run-benchmarks.mjs'), 'utf8');
+  assert.match(runner, /BENCHMARKS_BLOCKED_PENDING_REAL_RPC_AND_END_TO_END_HARNESS/);
+  assert.match(runner, /actual transaction receipts/i);
 });
