@@ -480,7 +480,7 @@ export class VerificationService {
     const subResult = await this.verifyRawCredential(verifiableCredentials[0]);
     const isOverallValid = subResult.isValid && nonceValid && holderSigValid;
 
-    return {
+    const presentationResult: VerificationResult = {
       ...subResult,
       isValid: isOverallValid,
       status: isOverallValid ? subResult.status : "INVALID",
@@ -490,6 +490,19 @@ export class VerificationService {
       checks: [...checks, ...subResult.checks],
       warnings: [...warnings, ...(subResult.warnings || [])],
     };
+
+    // Do not leak credential-subject PII or private claims from a presentation
+    // that failed holder authentication or challenge/audience validation.
+    if (!isOverallValid) {
+      presentationResult.credential = {
+        ...presentationResult.credential,
+        recipientName: "Undisclosed",
+        recipientEmail: undefined,
+        claims: {},
+      };
+    }
+
+    return presentationResult;
   }
 
   /**
