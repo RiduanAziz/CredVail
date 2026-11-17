@@ -1,23 +1,12 @@
 /**
- * CREDVAIL Selective Disclosure & Privacy Engine (ECDSA-SD-2023 Parity)
- * 
- * Provides:
- * 1. Cryptographic claim blinding with random salts (SHA-256 digests)
- * 2. Selective disclosure credential issuance
- * 3. Holder consent & redaction: selective disclosure presentation generation
- * 4. Verifier-side disclosure evaluation and blinded claim verification
- * 5. Replay-resistant holder proof binding (W3C Verifiable Presentation)
- * 
- * Meets Empirical Thesis Targets:
- * - Metric M2: Selective disclosure payload reduction >= 40% vs full credential
- * - STRIDE Threat Mitigation (I): Zero PII leakage for non-disclosed attributes
+ * CREDVAIL Selective Disclosure Security Gate.
+ *
+ * The previous custom salted-JSON disclosure mechanism was not an
+ * interoperable W3C ecdsa-sd-2023 implementation. Issuance, derivation and
+ * verification are deliberately disabled until a maintained cryptosuite
+ * and its issuer/holder proof workflows are integrated and tested.
  */
 
-import crypto from "node:crypto";
-import { canonicalizeJson } from "./canonical.ts";
-import { KeyService } from "./key-service.ts";
-import type { GeneratedKeyPair } from "./key-service.ts";
-import { VcService } from "./vc-service.ts";
 import type { W3CVerifiableCredential } from "./vc-service.ts";
 
 export interface ClaimDisclosure {
