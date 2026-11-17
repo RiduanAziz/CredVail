@@ -35,6 +35,16 @@ console.log('='.repeat(70));
 console.log(' CREDVAIL RESEARCH LAB — EMPIRICAL BENCHMARK PROTOCOL (PHASE 13)');
 console.log('='.repeat(70));
 
+// BENCHMARKS_BLOCKED_PENDING_REAL_RPC_AND_END_TO_END_HARNESS
+// The previous runner used simulated blockchain state, hard-coded gas estimates,
+// and a credential-signing/Merkle microbenchmark in place of end-to-end certificate
+// generation and public verification. Do not generate thesis evidence from it.
+// Replace this runner with a harness that records real RPC receipts and complete
+// application-pipeline timings before re-enabling research measurements.
+throw new Error(
+  "Research benchmarks are disabled: implement real transaction-receipt gas measurements and end-to-end application benchmarks first."
+);
+
 async function runBenchmark() {
   const tenantSlug = 'empirical-lab';
   const certificateNumber = 'BENCH-2026-9999';
