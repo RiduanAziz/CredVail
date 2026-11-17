@@ -45,6 +45,7 @@ export default function WalletPage() {
   const [selectedCred, setSelectedCred] = useState<StoredWalletCredential | null>(null);
   const [disclosedKeys, setDisclosedKeys] = useState<Set<string>>(new Set());
   const [challengeNonce, setChallengeNonce] = useState("");
+  const [verifierAudience, setVerifierAudience] = useState("");
   const [generatingVp, setGeneratingVp] = useState(false);
   const [generatedVp, setGeneratedVp] = useState<W3CVerifiablePresentation | null>(null);
   const [reductionPercent, setReductionPercent] = useState<number>(0);
@@ -96,10 +97,16 @@ export default function WalletPage() {
 
   const handleFetchChallengeNonce = async () => {
     try {
-      const res = await fetch("/api/v1/verify/challenge", { method: "POST" });
+      const audience = window.location.origin;
+      const res = await fetch("/api/v1/verify/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audience }),
+      });
       const json = await res.json();
       if (json.success && json.data?.nonce) {
         setChallengeNonce(json.data.nonce);
+        setVerifierAudience(json.data.audience || audience);
       }
     } catch (err) {
       console.error("Failed to fetch challenge nonce:", err);
@@ -132,7 +139,7 @@ export default function WalletPage() {
           credentialId: selectedCred.credentialId,
           disclosedKeys: Array.from(disclosedKeys),
           challengeNonce,
-          verifierDomain: "credvail.com",
+          verifierDomain: verifierAudience,
         }),
       });
 
