@@ -15,7 +15,15 @@
 
 The platform provides a dual-layer credentialing architecture:
 1. **Human-Centric Digital Certificate Management:** Multi-tenant dashboard, drag-and-drop template designer, CSV/XLSX bulk ingestion with formula injection protection, collision-safe certificate numbering, and print-ready vector PDF generation with embedded QR codes.
-2. **Cryptographic Trust & Verification Infrastructure:** W3C Verifiable Credentials Data Model 2.0, W3C `did:web` institutional identity, ECDSA-SD-2023 for zero-knowledge selective disclosure, W3C Bitstring Status Lists, Ethereum Sepolia Merkle-root batch anchoring, and freshness-aware 5-state verification.
+2. **Cryptographic Trust & Verification Infrastructure:** W3C Verifiable Credentials Data Model 2.0 credential structures, W3C `did:web` institutional identity, ECDSA P-256 signing in the current prototype, Ethereum Sepolia-compatible Merkle-root batch anchoring, status-list snapshots, and freshness-aware verification. Standards-compliant selective disclosure is a planned capability and is intentionally disabled until a maintained W3C `ecdsa-sd-2023` cryptosuite is integrated.
+
+---
+
+## Current Security-Hardening Status
+
+The `security/hardening-selective-disclosure` branch and [draft PR #1](https://github.com/RiduanAziz/CredVail/pull/1) intentionally disable the legacy custom disclosure-token implementation. Do not describe the current implementation as W3C ECDSA-SD-2023 or zero-knowledge selective disclosure.
+
+The previous benchmark runner is also blocked because its blockchain state was simulated by default and some gas values were hard-coded. Existing benchmark artifacts are development diagnostics, not final thesis evidence. See [Security Remediation Status](docs/security/REMEDIATION_STATUS.md).
 
 ---
 
@@ -41,7 +49,7 @@ CREDVAIL addresses the critical trilemma in academic and vocational credentialin
 - **Database:** PostgreSQL, Prisma ORM.
 - **Authentication:** Argon2id password hashing, secure session management, multi-tenant RBAC.
 - **Blockchain:** Ethereum Sepolia Testnet, Solidity `^0.8.24`, OpenZeppelin Contracts v5, Foundry, Viem.
-- **Credentials & Cryptography:** W3C VC 2.0, W3C `did:web` / `did:key`, ECDSA-SD-2023, W3C Bitstring Status List v1.0, RFC 6962 / Keccak-256 Merkle Trees, WebCrypto API.
+- **Credentials & Cryptography:** W3C VC Data Model 2.0 structures, W3C `did:web` / `did:key`, ECDSA P-256 prototype signatures, Keccak-256 Merkle trees, and status-list snapshot anchoring. The current status-list payload still requires migration and conformance testing against W3C Bitstring Status List v1.0. Selective disclosure is disabled pending standards-suite integration.
 - **Document Processing:** PDF generation, QR code generation, CSV/XLSX sanitized parser, streaming ZIP generation.
 - **Testing:** Vitest, Playwright, Foundry, automated benchmark suite.
 
