@@ -7,6 +7,7 @@ import { KeyRepository } from "@/lib/repositories/key-repository";
 import { KeyService } from "@/lib/crypto/key-service";
 import { VcService, W3CVerifiableCredential } from "@/lib/crypto/vc-service";
 import { BlockchainService } from "@/lib/blockchain/blockchain-service";
+import { canonicalizeJson } from "@/lib/crypto/canonical";
 
 describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
   const tenantSlug = "harvard-verify";
@@ -273,43 +274,83 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     expect(result.cryptography.signatureValid).toBe(true);
   });
 
-  it("9. should verify a W3C Verifiable Presentation with valid challenge nonce", async () => {
-    const { nonce } = VerificationService.createChallengeNonce();
-
-    const vp = {
+  const createSignedHolderPresentation = (nonce: string, audience: string) => {
+    const holderKeyPair = KeyService.generateEcdsaKeyPair();
+    const holderDid = `did:key:${holderKeyPair.publicKeyMultibase}`;
+    const body = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       type: ["VerifiablePresentation"],
-      id: "urn:uuid:presentation-001",
+      id: `urn:uuid:${crypto.randomUUID()}`,
+      holder: holderDid,
       verifiableCredential: [signedVc],
     };
+    const signedPayload = `${canonicalizeJson(body)}.${nonce}.${audience}`;
+
+    return {
+      ...body,
+      proof: {
+        type: "JsonWebSignature2020",
+        created: new Date().toISOString(),
+        verificationMethod: `${holderDid}#key-1`,
+        challenge: nonce,
+        domain: audience,
+        jws: KeyService.signData(holderKeyPair.privateKeyPem, signedPayload),
+      },
+    };
+  };
+
+  it("9. verifies a holder-signed presentation only with its one-use challenge and audience", async () => {
+    const audience = "https://verifier.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const vp = createSignedHolderPresentation(nonce, audience);
 
     const result = await VerificationService.verifyPresentation(vp, nonce);
 
     expect(result.status).toBe("VALID");
     expect(result.isValid).toBe(true);
-
-    const nonceCheck = result.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION");
-    expect(nonceCheck?.passed).toBe(true);
+    expect(result.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION")?.passed).toBe(true);
+    expect(result.checks.find((c) => c.code === "HOLDER_PRESENTATION_SIGNATURE")?.passed).toBe(true);
   });
 
-  it("10. should reject presentation verification on replayed challenge nonce", async () => {
-    const { nonce } = VerificationService.createChallengeNonce();
+  it("10. rejects replay of a holder presentation challenge", async () => {
+    const audience = "https://verifier.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const vp = createSignedHolderPresentation(nonce, audience);
 
+    const firstResult = await VerificationService.verifyPresentation(vp, nonce);
+    expect(firstResult.isValid).toBe(true);
+
+    const replayResult = await VerificationService.verifyPresentation(vp, nonce);
+    expect(replayResult.isValid).toBe(false);
+    expect(replayResult.status).toBe("INVALID");
+    expect(replayResult.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION")?.passed).toBe(false);
+  });
+
+  it("11. rejects presentations when no challenge nonce is supplied", async () => {
+    const audience = "https://verifier.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const vp = createSignedHolderPresentation(nonce, audience);
+
+    const result = await VerificationService.verifyPresentation(vp);
+    expect(result.isValid).toBe(false);
+    expect(result.status).toBe("INVALID");
+    expect(result.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION")?.passed).toBe(false);
+  });
+
+  it("12. rejects presentations that have a valid credential but no holder proof", async () => {
+    const audience = "https://verifier.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, audience);
     const vp = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       type: ["VerifiablePresentation"],
-      id: "urn:uuid:presentation-002",
+      id: "urn:uuid:presentation-without-holder-proof",
       verifiableCredential: [signedVc],
     };
 
-    // First use consumes the nonce
-    await VerificationService.verifyPresentation(vp, nonce);
-
-    // Replay attack with same nonce
-    const replayResult = await VerificationService.verifyPresentation(vp, nonce);
-
-    const nonceCheck = replayResult.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION");
-    expect(nonceCheck?.passed).toBe(false);
+    const result = await VerificationService.verifyPresentation(vp, nonce);
+    expect(result.isValid).toBe(false);
+    expect(result.status).toBe("INVALID");
+    expect(result.checks.find((c) => c.code === "HOLDER_PRESENTATION_SIGNATURE")?.passed).toBe(false);
   });
 
   it("11. Empirical Metric M1: Median verification latency < 250ms", async () => {
