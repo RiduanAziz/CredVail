@@ -354,7 +354,38 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     expect(result.checks.find((c) => c.code === "HOLDER_PRESENTATION_SIGNATURE")?.passed).toBe(false);
   });
 
-  it("11. Empirical Metric M1: Median verification latency < 250ms", async () => {
+  it("13. rejects a presentation signed for a different verifier audience", async () => {
+    const expectedAudience = "https://verifier.example.test";
+    const wrongAudience = "https://attacker.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, expectedAudience);
+    const vp = createSignedHolderPresentation(nonce, wrongAudience);
+
+    const rejected = await VerificationService.verifyPresentation(vp, nonce);
+    expect(rejected.isValid).toBe(false);
+    expect(rejected.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION")?.passed).toBe(false);
+
+    // A mismatched audience must not consume the valid challenge.
+    const correctlyBoundVp = createSignedHolderPresentation(nonce, expectedAudience);
+    const accepted = await VerificationService.verifyPresentation(correctlyBoundVp, nonce);
+    expect(accepted.isValid).toBe(true);
+  });
+
+  it("14. rejects a tampered holder signature without consuming the challenge", async () => {
+    const audience = "https://verifier.example.test";
+    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const vp = createSignedHolderPresentation(nonce, audience);
+    vp.proof.jws = `${vp.proof.jws.slice(0, -4)}0000`;
+
+    const rejected = await VerificationService.verifyPresentation(vp, nonce);
+    expect(rejected.isValid).toBe(false);
+    expect(rejected.checks.find((c) => c.code === "HOLDER_PRESENTATION_SIGNATURE")?.passed).toBe(false);
+
+    const validVp = createSignedHolderPresentation(nonce, audience);
+    const accepted = await VerificationService.verifyPresentation(validVp, nonce);
+    expect(accepted.isValid).toBe(true);
+  });
+
+  it("15. Empirical Metric M1: Median verification latency < 250ms", async () => {
     const latencies: number[] = [];
     for (let i = 0; i < 5; i++) {
       const res = await VerificationService.verifyByPublicId("HARV-2026-000101");
@@ -367,7 +398,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     expect(median).toBeLessThan(250);
   });
 
-  it("12. Empirical Metric M4: Cryptographic Merkle proof verification latency < 2ms", async () => {
+  it("16. Empirical Metric M4: Cryptographic Merkle proof verification latency < 2ms", async () => {
     const res = await VerificationService.verifyByPublicId("HARV-2026-000101");
     const merkleLatency = res.cryptography.merkleVerificationLatencyMs ?? 0;
 
