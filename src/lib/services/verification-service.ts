@@ -110,6 +110,7 @@ export interface ChallengeNonce {
   nonce: string;
   issuedAt: number;
   expiresAt: number;
+  audience: string;
 }
 
 export class VerificationService {
@@ -120,15 +121,23 @@ export class VerificationService {
    * Generates a replay-resistant challenge nonce for interactive presentation verification.
    * Challenge expires after 5 minutes (300,000 ms).
    */
-  static createChallengeNonce(): { nonce: string; expiresAt: string } {
+  static createChallengeNonce(
+    ttlSeconds: number = 300,
+    audience: string = ""
+  ): { nonce: string; expiresAt: string; audience: string } {
+    if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 600) {
+      throw new Error("Challenge TTL must be an integer between 1 and 600 seconds.");
+    }
+
     const nonce = `cn_${crypto.randomBytes(24).toString("hex")}`;
     const now = Date.now();
-    const expiresAt = now + 5 * 60 * 1000;
+    const expiresAt = now + ttlSeconds * 1000;
 
     this.challengeCache.set(nonce, {
       nonce,
       issuedAt: now,
       expiresAt,
+      audience,
     });
 
     // Housekeeping: remove expired nonces
@@ -141,14 +150,16 @@ export class VerificationService {
     return {
       nonce,
       expiresAt: new Date(expiresAt).toISOString(),
+      audience,
     };
   }
 
   /**
    * Convenience alias returning just the nonce string.
+   * An audience is required when the challenge is used for VP verification.
    */
-  static generateChallengeNonce(ttlSeconds: number = 300): string {
-    return this.createChallengeNonce().nonce;
+  static generateChallengeNonce(ttlSeconds: number = 300, audience: string = ""): string {
+    return this.createChallengeNonce(ttlSeconds, audience).nonce;
   }
 
   /**
@@ -325,56 +336,88 @@ export class VerificationService {
     const startTime = performance.now();
     const checks: VerificationCheckStep[] = [];
     const warnings: string[] = [];
+    const proof = vpPayload.proof && typeof vpPayload.proof === "object"
+      ? (vpPayload.proof as Record<string, unknown>)
+      : null;
 
-    // Challenge Nonce Evaluation
-    let nonceValid = true;
-    if (challengeNonce) {
-      nonceValid = this.consumeChallengeNonce(challengeNonce);
-      checks.push({
-        code: "CHALLENGE_NONCE_VERIFICATION",
-        title: "Replay-Resistant Nonce Validation",
-        description: "Checking single-use cryptographically random presentation nonce",
-        passed: nonceValid,
-        error: nonceValid ? undefined : "Nonce challenge is invalid, expired, or previously consumed (replay protection).",
-      });
+    // Fail closed: presentation verification always requires a server-issued challenge.
+    const issuedChallenge = challengeNonce
+      ? this.challengeCache.get(challengeNonce)
+      : undefined;
+    const challengeMatches =
+      !!challengeNonce &&
+      !!issuedChallenge &&
+      issuedChallenge.expiresAt >= Date.now() &&
+      !!issuedChallenge.audience &&
+      proof?.challenge === challengeNonce &&
+      proof?.domain === issuedChallenge.audience;
 
-      if (!nonceValid) {
-        warnings.push("Presentation rejected due to invalid or replayed challenge nonce.");
-      }
-    }
-
-    // Holder Presentation Signature Verification
-    let holderSigValid = true;
-    if (vpPayload.proof && (vpPayload.proof as any).jws) {
-      const proof = vpPayload.proof as any;
+    // Holder proof is mandatory. An absent proof, unknown DID method, or
+    // unresolvable key is a verification failure, never a default success.
+    let holderSigValid = false;
+    if (
+      proof &&
+      typeof proof.jws === "string" &&
+      typeof proof.challenge === "string" &&
+      typeof proof.domain === "string" &&
+      typeof proof.verificationMethod === "string" &&
+      typeof vpPayload.holder === "string"
+    ) {
       try {
-        const holderId = (vpPayload.holder as string) || proof.verificationMethod?.split("#")[0] || "";
-        let holderPem = "";
-        if (holderId.startsWith("did:key:")) {
-          holderPem = KeyService.didKeyToPublicKeyPem(holderId);
-        }
-        if (holderPem) {
-          const { proof: _p, ...vpBody } = vpPayload;
+        const holderId = vpPayload.holder as string;
+        const verificationMethod = proof.verificationMethod;
+        const isBoundMethod =
+          holderId.startsWith("did:key:") &&
+          verificationMethod.startsWith(`${holderId}#`);
+
+        if (isBoundMethod) {
+          const holderPem = KeyService.didKeyToPublicKeyPem(holderId);
+          const { proof: _proof, ...vpBody } = vpPayload;
           const canonicalVp = canonicalizeJson(vpBody);
-          const expectedSignedData = `${canonicalVp}.${proof.challenge || ""}.${proof.domain || ""}`;
-          holderSigValid = KeyService.verifySignature(holderPem, expectedSignedData, proof.jws);
+          const signedData = `${canonicalVp}.${proof.challenge}.${proof.domain}`;
+          holderSigValid = KeyService.verifySignature(holderPem, signedData, proof.jws);
         }
       } catch (err: any) {
         holderSigValid = false;
         warnings.push(`Holder presentation signature verification error: ${err.message}`);
       }
-
-      checks.push({
-        code: "HOLDER_PRESENTATION_SIGNATURE",
-        title: "Holder Presentation Digital Signature",
-        description: "Cryptographic validation of holder signature and presentation binding",
-        passed: holderSigValid,
-        error: holderSigValid ? undefined : "Holder presentation signature is invalid or tampered.",
-      });
     }
 
-    // Extract Verifiable Credential from Presentation
-    const verifiableCredentials = (vpPayload.verifiableCredential || vpPayload.verifiableCredentials) as any[];
+    // Consume the challenge atomically within this process only after the
+    // holder proof and challenge/audience binding have both passed.
+    const nonceValid =
+      challengeMatches &&
+      holderSigValid &&
+      this.consumeChallengeNonce(challengeNonce as string);
+
+    checks.push({
+      code: "CHALLENGE_NONCE_VERIFICATION",
+      title: "Replay-Resistant Nonce and Audience Validation",
+      description: "Requires an unexpired, server-issued, one-use challenge bound to the verifier audience and signed presentation.",
+      passed: nonceValid,
+      error: nonceValid
+        ? undefined
+        : "Challenge is missing, expired, already consumed, audience-mismatched, or not bound to a valid holder proof.",
+    });
+
+    checks.push({
+      code: "HOLDER_PRESENTATION_SIGNATURE",
+      title: "Holder Presentation Digital Signature",
+      description: "Requires a resolvable did:key holder and a valid signature over the presentation, challenge, and audience.",
+      passed: holderSigValid,
+      error: holderSigValid
+        ? undefined
+        : "Holder proof is missing, unresolvable, incorrectly bound, or cryptographically invalid.",
+    });
+
+    if (!nonceValid || !holderSigValid) {
+      warnings.push("Presentation rejected because holder authentication or challenge binding failed.");
+    }
+
+    const verifiableCredentials = (
+      vpPayload.verifiableCredential || vpPayload.verifiableCredentials
+    ) as any[];
+
     if (!Array.isArray(verifiableCredentials) || verifiableCredentials.length === 0) {
       const latency = Math.round(performance.now() - startTime);
       return {
@@ -432,17 +475,18 @@ export class VerificationService {
       };
     }
 
-    // Verify first embedded credential
-    const firstVc = verifiableCredentials[0];
-    const subResult = await this.verifyRawCredential(firstVc);
-
+    // Evaluate the embedded credential independently. The VP is valid only
+    // when the credential and holder-authentication layers both pass.
+    const subResult = await this.verifyRawCredential(verifiableCredentials[0]);
     const isOverallValid = subResult.isValid && nonceValid && holderSigValid;
-    const overallStatus = isOverallValid ? subResult.status : "INVALID";
 
     return {
       ...subResult,
       isValid: isOverallValid,
-      status: overallStatus,
+      status: isOverallValid ? subResult.status : "INVALID",
+      freshnessOutcome: isOverallValid
+        ? subResult.freshnessOutcome
+        : "INVALID",
       checks: [...checks, ...subResult.checks],
       warnings: [...warnings, ...(subResult.warnings || [])],
     };
@@ -549,26 +593,24 @@ export class VerificationService {
       }
     }
 
-    // Selective Disclosure Recognition (ECDSA-SD-2023)
+    // The repository's custom salted-JSON disclosure format is not the W3C
+    // ecdsa-sd-2023 cryptosuite. Detect it and fail closed until a real
+    // cryptosuite implementation is integrated and independently verified.
     const isSelectiveDisclosure =
       Array.isArray((vcPayload.credentialSubject as any)?._disclosures) ||
-      !!(vcPayload.credentialSubject as any)?.disclosedClaims;
-    const selectiveDisclosureClaims: Record<string, string> =
-      { ...((vcPayload.credentialSubject as any)?.disclosedClaims || {}) };
+      !!(vcPayload.credentialSubject as any)?.disclosedClaims ||
+      (vcPayload.credentialSubject as any)?._sd_alg === "sha-256";
+    const selectiveDisclosureClaims: Record<string, string> = {};
 
-    if (Array.isArray((vcPayload.credentialSubject as any)?._disclosures)) {
-      const tokens = (vcPayload.credentialSubject as any)._disclosures as string[];
-      for (const token of tokens) {
-        try {
-          const jsonStr = Buffer.from(token, "base64url").toString("utf8");
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.key && parsed.value !== undefined) {
-            selectiveDisclosureClaims[parsed.key] = parsed.value;
-          }
-        } catch {
-          // Ignore non-json tokens
-        }
-      }
+    if (isSelectiveDisclosure) {
+      checks.push({
+        code: "SELECTIVE_DISCLOSURE_PROFILE_UNSUPPORTED",
+        title: "Selective Disclosure Cryptographic Profile",
+        description: "The custom disclosure token format is not an interoperable W3C Data Integrity cryptosuite.",
+        passed: false,
+        error: "Selective-disclosure verification is disabled until issuer commitments, derived-proof verification, and holder binding use a maintained standards-compliant cryptosuite.",
+      });
+      warnings.push("Selective-disclosure presentation rejected: unsupported custom disclosure profile.");
     }
 
     // ----------------------------------------------------
@@ -581,7 +623,7 @@ export class VerificationService {
 
     try {
       if (isSelectiveDisclosure) {
-        canonicalHashMatches = true;
+        canonicalHashMatches = false;
       } else {
         // Strip evidence to reproduce the signed VC payload at the moment leafHash was calculated
         const { evidence: _ev, ...signedWithoutEvidence } = vcPayload;
@@ -645,7 +687,7 @@ export class VerificationService {
       }
 
       if (isSelectiveDisclosure) {
-        signatureValid = true;
+        signatureValid = false;
       } else if (issuerKeyRecord) {
         if (issuerKeyRecord.isCompromised) {
           keyStatus = "COMPROMISED";
@@ -707,7 +749,7 @@ export class VerificationService {
 
     try {
       if (isSelectiveDisclosure) {
-        merkleProofValid = true;
+        merkleProofValid = false;
       } else if (cred) {
         merkleProof = await CredentialRepository.getMerkleProof(cred.tenantId, cred.id);
       }
@@ -759,18 +801,19 @@ export class VerificationService {
       error: merkleProofValid ? undefined : "Cryptographic Merkle inclusion proof rejected: Leaf does not evaluate to root.",
     });
 
-    // Selective Disclosure Privacy Check
+    // Never report privacy verification as successful for the unsupported
+    // custom disclosure format. No disclosed claims are trusted or returned.
     if (isSelectiveDisclosure) {
-      const disclosedKeys = Object.keys(selectiveDisclosureClaims);
       checks.push({
         code: "SELECTIVE_DISCLOSURE_PRIVACY",
-        title: "ECDSA-SD-2023 Selective Disclosure",
-        description: `Verified ${disclosedKeys.length} disclosed claims with cryptographic blinding of non-disclosed PII`,
-        passed: true,
+        title: "Selective Disclosure Privacy",
+        description: "Disclosure commitments could not be verified with a supported cryptographic suite.",
+        passed: false,
         details: {
-          disclosedClaims: selectiveDisclosureClaims,
-          piiBlinded: true,
+          disclosedClaims: {},
+          piiBlinded: false,
         },
+        error: "No selective-disclosure claims are trusted by this verifier.",
       });
     }
 
@@ -900,8 +943,8 @@ export class VerificationService {
         issuerName: tenantName,
         issuerDid: tenantDid,
         state: cred?.state || (isValid ? "ISSUED" : overallStatus),
-        claims: (isSelectiveDisclosure && Object.keys(selectiveDisclosureClaims).length > 0)
-          ? selectiveDisclosureClaims
+        claims: isSelectiveDisclosure
+          ? {}
           : (cred?.claimsData as Record<string, string>) || {
               recipient_name: recipientName,
               certificate_number: certificateNumber,
