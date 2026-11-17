@@ -115,7 +115,8 @@ export class WalletService {
       certificate_number: cred.certificateNumber,
     };
 
-    const sdPackage = SelectiveDisclosureEngine.createDisclosurePackage(claims);
+    // Selective disclosure remains disabled until a standards-compliant W3C
+    // cryptosuite is integrated. Never mint custom, unverifiable disclosure tokens.
 
     const storedItem: StoredWalletCredential = {
       id: cred.id,
@@ -127,7 +128,7 @@ export class WalletService {
       issuerName,
       issuerDid,
       claims,
-      disclosures: sdPackage.credentialSubjectDisclosures,
+      disclosures: {},
       rawVc,
       claimedAt: new Date().toISOString(),
     };
