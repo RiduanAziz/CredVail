@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import crypto from "node:crypto";
 import { VerificationService } from "@/lib/services/verification-service";
 import { CredentialRepository } from "@/lib/repositories/credential-repository";
 import { TenantRepository } from "@/lib/repositories/tenant-repository";
