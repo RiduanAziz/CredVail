@@ -224,7 +224,7 @@ export default function WalletPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/claim">
-              <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button variant="brand" className="gap-2 shadow-md">
                 <Plus className="w-4 h-4" />
                 <span>Claim Credential</span>
               </Button>
@@ -282,7 +282,7 @@ export default function WalletPage() {
                   </CardDescription>
                 </div>
                 <Link href="/claim">
-                  <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 mt-2">
+                  <Button size="sm" variant="brand" className="gap-2 mt-2">
                     <Plus className="w-4 h-4" />
                     <span>Claim Credential</span>
                   </Button>

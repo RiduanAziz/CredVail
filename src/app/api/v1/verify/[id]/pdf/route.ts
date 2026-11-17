@@ -42,7 +42,7 @@ export async function GET(
     const u8 = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
     const filename = `${cred.certificateNumber}.pdf`;
 
-    return new NextResponse(u8, {
+    return new NextResponse(Buffer.from(u8), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

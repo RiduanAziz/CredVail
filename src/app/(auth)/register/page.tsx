@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Shield, Lock, Mail, User, Building, Globe, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default function RegisterPage() {
         throw new Error(tenantData.error?.message || "Failed to create organization");
       }
 
-      router.push(`/dashboard/${tenantData.data.slug}`);
+      router.push(`/${tenantData.data.slug}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -64,11 +65,16 @@ export default function RegisterPage() {
     <div className="min-h-[90vh] flex items-center justify-center py-12 px-4 sm:px-6">
       <div className="w-full max-w-lg space-y-6">
         <div className="flex flex-col items-center text-center space-y-2">
-          <Link href="/" className="flex items-center gap-2 font-bold text-2xl tracking-tight mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-              <Shield className="h-6 w-6" />
-            </div>
-            <span>CRED<span className="text-primary font-black">VAIL</span></span>
+          <Link href="/" className="flex items-center gap-2.5 font-bold text-2xl tracking-tight mb-2 group">
+            <Image
+              src="/brand/brand-symbol-128.png"
+              alt="CREDVAIL"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl shadow-sm object-contain transition-transform group-hover:scale-105"
+              priority
+            />
+            <span>CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span></span>
           </Link>
           <h1 className="text-2xl font-bold tracking-tight">Register Your Institution</h1>
           <p className="text-sm text-muted-foreground">
@@ -184,7 +190,7 @@ export default function RegisterPage() {
               </div>
             </CardContent>
             <CardFooter className="flex flex-col space-y-4 pt-2">
-              <Button type="submit" className="w-full gap-2" disabled={loading}>
+              <Button type="submit" variant="brand" className="w-full gap-2" disabled={loading}>
                 {loading ? (
                   <span>Creating Tenant...</span>
                 ) : (

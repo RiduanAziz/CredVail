@@ -123,7 +123,7 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(id2.keyPair.publicKeyMultibase).toBe(id1.keyPair.publicKeyMultibase);
   });
 
-  it("2. claims issued credential by verifying recipient email and stores salted disclosures in vault", async () => {
+  it("2. claims issued credential by verifying recipient email without unsupported legacy disclosure generation", async () => {
     const claimed = await WalletService.claimCredential(
       { certificateNumber: testCertNumber, recipientEmail: studentEmail },
       holderId
@@ -132,13 +132,7 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(claimed.certificateNumber).toBe(testCertNumber);
     expect(claimed.recipientEmail).toBe(studentEmail);
     expect(claimed.recipientName).toBe("Alice Student");
-    expect(claimed.disclosures).toBeDefined();
-
-    // Assert each claim has an independent salt and disclosure token
-    expect(claimed.disclosures.course_name).toBeDefined();
-    expect(claimed.disclosures.course_name.value).toBe("Advanced Applied Cryptography");
-    expect(claimed.disclosures.course_name.salt).toBeDefined();
-    expect(claimed.disclosures.grade.value).toBe("Distinction");
+    expect(claimed.disclosures).toEqual({});
 
     // Check credential is in vault
     const inVault = WalletService.getCredential(testCertNumber, holderId);

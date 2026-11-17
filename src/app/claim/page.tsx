@@ -140,8 +140,9 @@ export default function ClaimCredentialPage() {
 
                 <Button
                   type="submit"
+                  variant="brand"
                   disabled={claiming}
-                  className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90 mt-2"
+                  className="w-full gap-2 mt-2 shadow-md"
                 >
                   {claiming ? (
                     <span>Verifying Ownership...</span>

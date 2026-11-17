@@ -1,8 +1,8 @@
 {
   "metric": "M3_Generation_Pipeline_Throughput",
   "batchSize": 50,
-  "elapsedMs": 31.53,
-  "certsPerSecond": 1585.66,
+  "elapsedMs": 70.37,
+  "certsPerSecond": 710.56,
   "targetThreshold": 30,
   "status": "PASSED"
 }

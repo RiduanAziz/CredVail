@@ -307,11 +307,17 @@ test('7. Empirical Metric M4: Merkle Proof Verification Latency (< 2.0ms per pro
   const tree = new CredvailMerkleTree(leaves);
   const proof = tree.getProof(0);
 
-  const start = performance.now();
-  for (let i = 0; i < 50; i++) {
+  // Warm up V8 JIT compiler
+  for (let i = 0; i < 10; i++) {
     CredvailMerkleTree.verifyProof(leaves[0], proof, tree.getRoot());
   }
-  const avgMs = (performance.now() - start) / 50;
+
+  const iterations = 100;
+  const start = performance.now();
+  for (let i = 0; i < iterations; i++) {
+    CredvailMerkleTree.verifyProof(leaves[0], proof, tree.getRoot());
+  }
+  const avgMs = (performance.now() - start) / iterations;
 
   assert.ok(avgMs < 2.0, `Merkle verification latency ${avgMs.toFixed(4)}ms must be < 2.0ms`);
 });

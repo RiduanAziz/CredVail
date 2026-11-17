@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Shield,
@@ -135,9 +136,13 @@ export default function DashboardLayout({
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between border-b bg-background px-4 py-3">
         <Link href={`/${slug}`} className="flex items-center gap-2 font-bold">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Shield className="h-4 w-4" />
-          </div>
+          <Image
+            src="/brand/brand-symbol-64.png"
+            alt="CREDVAIL"
+            width={32}
+            height={32}
+            className="h-8 w-8 rounded-lg object-contain"
+          />
           <span className="text-sm font-bold tracking-tight">CREDVAIL</span>
         </Link>
         <Button
@@ -158,13 +163,17 @@ export default function DashboardLayout({
         <div className="flex flex-col">
           {/* Institution Header */}
           <div className="p-4 border-b">
-            <Link href="/" className="flex items-center gap-2 font-bold mb-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-                <Shield className="h-5 w-5" />
-              </div>
+            <Link href="/" className="flex items-center gap-2.5 font-bold mb-4 group">
+              <Image
+                src="/brand/brand-symbol-64.png"
+                alt="CREDVAIL"
+                width={36}
+                height={36}
+                className="h-9 w-9 rounded-xl shadow-sm object-contain transition-transform group-hover:scale-105"
+              />
               <div className="flex flex-col leading-none">
                 <span className="font-extrabold tracking-tight text-base">
-                  CRED<span className="text-primary font-black">VAIL</span>
+                  CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span>
                 </span>
                 <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">
                   Trust Network
@@ -205,7 +214,7 @@ export default function DashboardLayout({
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-xs"
+                      ? "bg-brand-gradient text-white shadow-sm font-semibold"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   }`}
                 >

@@ -36,18 +36,18 @@ test("2. Legacy custom disclosure issuance is explicitly disabled", async () => 
     /maintained W3C ecdsa-sd-2023 cryptosuite/i
   );
   assert.throws(
-    () => SelectiveDisclosureEngine.attachSelectiveDisclosures({} as any, {}),
+    () => SelectiveDisclosureEngine.attachSelectiveDisclosures({}, {}),
     /supported W3C Data Integrity cryptosuite/i
   );
   assert.throws(
-    () => SelectiveDisclosureEngine.createSelectivePresentation({} as any),
+    () => SelectiveDisclosureEngine.createSelectivePresentation({}),
     /not interoperable or independently verifiable/i
   );
 });
 
 test("3. Legacy selective-disclosure verification can never report success", async () => {
   const { SelectiveDisclosureEngine } = await import("../src/lib/crypto/selective-disclosure.ts");
-  const result = SelectiveDisclosureEngine.verifySelectivePresentation({} as any, "unused");
+  const result = SelectiveDisclosureEngine.verifySelectivePresentation({}, "unused");
   assert.equal(result.isValid, false);
   assert.equal(result.issuerSignatureValid, false);
   assert.equal(result.holderProofValid, false);

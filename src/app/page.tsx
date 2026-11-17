@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   Shield,
   CheckCircle2,
@@ -27,6 +28,19 @@ export default function HomePage() {
       <section className="relative overflow-hidden border-b bg-gradient-to-b from-primary/5 via-background to-background py-20 md:py-32">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6 relative z-10">
           <div className="flex flex-col items-center text-center max-w-3xl mx-auto space-y-6">
+            <div className="flex items-center justify-center">
+              <div className="relative p-3 rounded-2xl bg-card border shadow-lg hover:shadow-xl transition-shadow">
+                <Image
+                  src="/brand/brand-symbol-128.png"
+                  alt="CREDVAIL Identity Mark"
+                  width={56}
+                  height={56}
+                  className="h-14 w-14 object-contain"
+                  priority
+                />
+              </div>
+            </div>
+
             <Badge variant="epoch" className="px-3.5 py-1 text-xs uppercase tracking-wider gap-1.5 shadow-sm">
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               <span>W3C VC 2.0 & Ethereum Sepolia Testnet</span>
@@ -34,7 +48,7 @@ export default function HomePage() {
 
             <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-foreground leading-[1.15]">
               Blockchain-Verified,{" "}
-              <span className="bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
+              <span className="bg-brand-gradient bg-clip-text text-transparent">
                 Privacy-Preserving
               </span>{" "}
               Digital Credentials
@@ -47,8 +61,8 @@ export default function HomePage() {
 
             <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 w-full sm:w-auto">
               <Link href="#verify" className="w-full sm:w-auto">
-                <Button size="lg" className="w-full sm:w-auto gap-2 shadow-md">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                <Button size="lg" variant="brand" className="w-full sm:w-auto gap-2 shadow-md">
+                  <CheckCircle2 className="h-5 w-5 text-white/90" />
                   <span>Launch Public Verifier</span>
                 </Button>
               </Link>
@@ -254,8 +268,8 @@ export default function HomePage() {
                   defaultValue="CREDVAIL-2026-000001"
                   readOnly
                 />
-                <Button size="lg" className="shrink-0 gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <Button size="lg" variant="brand" className="shrink-0 gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-white/90" />
                   <span>Verify Credential</span>
                 </Button>
               </div>

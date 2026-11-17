@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Shield, Github, FileText, CheckCircle2 } from "lucide-react";
+import Image from "next/image";
+import { Github, FileText, CheckCircle2 } from "lucide-react";
 
 export function Footer() {
   return (
@@ -8,8 +9,14 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
           <div className="space-y-3 md:col-span-1">
             <div className="flex items-center gap-2 font-bold text-lg">
-              <Shield className="h-5 w-5 text-primary" />
-              <span>CRED<span className="text-primary font-black">VAIL</span></span>
+              <Image
+                src="/brand/brand-symbol-64.png"
+                alt="CREDVAIL"
+                width={28}
+                height={28}
+                className="h-7 w-7 rounded-md object-contain"
+              />
+              <span>CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span></span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Blockchain-Verified, Privacy-Preserving Digital Credential Infrastructure.

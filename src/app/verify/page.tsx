@@ -179,7 +179,7 @@ export default function UniversalVerifyPage() {
                       className="pl-10 h-11 text-sm font-mono"
                     />
                   </div>
-                  <Button type="submit" className="h-11 px-6 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Button type="submit" variant="brand" className="h-11 px-6 gap-2 shadow-sm">
                     <span>Verify</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>

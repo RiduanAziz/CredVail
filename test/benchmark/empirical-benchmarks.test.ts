@@ -167,8 +167,8 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
     expect(p95).toBeLessThan(600);
   });
 
-  // METRIC M2 & HYPOTHESIS H2: Selective Disclosure Payload Wire Efficiency
-  it("Metric M2 & Hypothesis H2: Selective Disclosure Wire Payload Reduction >= 40%", async () => {
+  // METRIC M2 (BLOCKED / NOT MEASURED): Selective Disclosure Wire Efficiency
+  it("Metric M2 (BLOCKED / NOT MEASURED): Rejects unsupported selective-presentation creation pending standards-compliant cryptosuite", async () => {
     // 1. Claim into wallet
     await WalletService.claimCredential(
       { certificateNumber, recipientEmail },
@@ -176,20 +176,18 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
     );
 
     // 2. Issue challenge nonce
-    const nonce = VerificationService.generateChallengeNonce(300);
+    const challenge = VerificationService.createChallengeNonce(300, "https://verifier.org");
 
-    // 3. Create selective presentation with 2 of 6 attributes
-    const presentationResult = WalletService.createSelectivePresentation(
-      certificateNumber,
-      ["degree_level", "program_name"],
-      nonce,
-      "verifier.org",
-      "bench_holder"
-    );
-
-    // Verify reduction percent
-    expect(presentationResult.wireSizeReductionPercent).toBeGreaterThanOrEqual(40);
-    expect(presentationResult.undisclosedCount).toBe(4);
+    // 3. Creation of non-standard selective presentation fails closed
+    expect(() =>
+      WalletService.createSelectivePresentation(
+        certificateNumber,
+        ["degree_level", "program_name"],
+        challenge.nonce,
+        "https://verifier.org",
+        "bench_holder"
+      )
+    ).toThrow(/disabled|unsupported/i);
   });
 
   // METRIC M3: Bulk Generation Throughput

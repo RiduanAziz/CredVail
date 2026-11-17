@@ -17,6 +17,10 @@ const buttonVariants = cva(
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        brand:
+          "bg-brand-gradient text-white shadow-md hover:opacity-95 hover:shadow-brand-glow active:scale-[0.98] border-0 transition-all",
+        brandOutline:
+          "border border-primary/40 bg-background text-primary hover:bg-brand-gradient-subtle hover:text-brand-violet hover:border-primary/70 transition-all",
         verified:
           "bg-emerald-600 text-white shadow hover:bg-emerald-700 active:scale-[0.98]",
       },

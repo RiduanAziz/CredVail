@@ -57,13 +57,19 @@ export default function KeysPage({
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/tenants/${slug}/keys`);
-      const json = await res.json();
-      if (json.success && json.data) {
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+
+      if (res.ok && json?.success && json?.data) {
         setData(json.data);
       } else {
         setNotification({
           type: "error",
-          message: json.error?.message || "Failed to load institutional keys.",
+          message: json?.error?.message || `Failed to load institutional keys (${res.status}).`,
         });
       }
     } catch (err: any) {
@@ -93,8 +99,14 @@ export default function KeysPage({
       const res = await fetch(`/api/v1/tenants/${slug}/keys/rotate`, {
         method: "POST",
       });
-      const json = await res.json();
-      if (json.success) {
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+
+      if (res.ok && json?.success) {
         setNotification({
           type: "success",
           message: `Successfully rotated to Key Epoch ${json.data.keyEpoch}.`,
@@ -104,7 +116,7 @@ export default function KeysPage({
       } else {
         setNotification({
           type: "error",
-          message: json.error?.message || "Failed to rotate key.",
+          message: json?.error?.message || `Failed to rotate key (${res.status}).`,
         });
       }
     } catch (err: any) {
@@ -127,8 +139,14 @@ export default function KeysPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ epoch: compromiseTarget.keyEpoch }),
       });
-      const json = await res.json();
-      if (json.success) {
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+
+      if (res.ok && json?.success) {
         setNotification({
           type: "success",
           message: `Key Epoch ${compromiseTarget.keyEpoch} flagged as COMPROMISED and immediately revoked.`,
@@ -139,7 +157,7 @@ export default function KeysPage({
       } else {
         setNotification({
           type: "error",
-          message: json.error?.message || "Failed to flag key compromise.",
+          message: json?.error?.message || `Failed to flag key compromise (${res.status}).`,
         });
       }
     } catch (err: any) {

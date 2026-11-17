@@ -32,6 +32,7 @@ export default function TenantOverviewPage({
   const [tenant, setTenant] = React.useState<TenantRecord | null>(null);
   const [analytics, setAnalytics] = React.useState<TenantAnalyticsOverview | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
+  const [approving, setApproving] = React.useState<boolean>(false);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -124,9 +125,11 @@ export default function TenantOverviewPage({
               <Button
                 variant="outline"
                 size="sm"
+                disabled={approving}
                 className="h-6 text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-500/20 gap-1 px-2"
                 onClick={async () => {
                   try {
+                    setApproving(true);
                     const res = await fetch(`/api/v1/tenants/${slug}`, {
                       method: "PATCH",
                       headers: { "Content-Type": "application/json" },
@@ -134,11 +137,13 @@ export default function TenantOverviewPage({
                     });
                     const d = await res.json();
                     if (res.ok) setTenant(d.data);
-                  } catch {}
+                  } finally {
+                    setApproving(false);
+                  }
                 }}
               >
                 <CheckCircle2 className="h-3 w-3" />
-                <span>Approve Organization</span>
+                <span>{approving ? "Approving..." : "Approve Organization"}</span>
               </Button>
             )}
           </div>
