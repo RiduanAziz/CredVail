@@ -50,6 +50,7 @@ export default function WalletPage() {
   const [generatedVp, setGeneratedVp] = useState<W3CVerifiablePresentation | null>(null);
   const [reductionPercent, setReductionPercent] = useState<number>(0);
   const [vpVerifyResult, setVpVerifyResult] = useState<VerificationResult | null>(null);
+  const [presentationError, setPresentationError] = useState<string | null>(null);
   const [verifyingVp, setVerifyingVp] = useState(false);
 
   useEffect(() => {
@@ -82,6 +83,7 @@ export default function WalletPage() {
     setSelectedCred(cred);
     setGeneratedVp(null);
     setVpVerifyResult(null);
+    setPresentationError(null);
 
     // Default: Disclose name and course, blind sensitive attributes (email, grade)
     const initialDisclosed = new Set<string>();
@@ -147,8 +149,15 @@ export default function WalletPage() {
       if (json.success && json.data) {
         setGeneratedVp(json.data.presentation);
         setReductionPercent(json.data.wireSizeReductionPercent);
+      } else {
+        setPresentationError(
+          json.message || json.error?.message ||
+          "Selective disclosure is temporarily disabled while CREDVAIL integrates a standards-compliant W3C cryptosuite."
+        );
       }
     } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown presentation error";
+      setPresentationError(message);
       console.error("Failed to generate presentation:", err);
     } finally {
       setGeneratingVp(false);
@@ -487,6 +496,12 @@ export default function WalletPage() {
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 </div>
+
+                {presentationError && (
+                  <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                    {presentationError}
+                  </div>
+                )}
 
                 {/* Output Presentation Result */}
                 {generatedVp && (
