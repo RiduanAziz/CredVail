@@ -187,32 +187,21 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(emptyList.length).toBe(0);
   });
 
-  it("6. creates a W3C Verifiable Presentation with selective disclosure from vault", async () => {
+  it("6. refuses to create a presentation with the legacy custom disclosure format", async () => {
     await WalletService.claimCredential(
       { certificateNumber: testCertNumber, recipientEmail: studentEmail },
       holderId
     );
 
-    const identity = WalletService.getOrCreateHolderIdentity(holderId);
-    const nonce = "verifier_challenge_nonce_999";
-    const domain = "verifier.org";
-
-    const presentationResult = WalletService.createSelectivePresentation(
-      testCertNumber,
-      ["course_name"], // disclose only course_name, blind grade & instructor_name
-      nonce,
-      domain,
-      holderId
-    );
-
-    expect(presentationResult.disclosedClaims).toEqual({
-      course_name: "Advanced Applied Cryptography",
-    });
-    expect(presentationResult.undisclosedCount).toBeGreaterThan(0);
-    expect(presentationResult.presentation.type).toContain("VerifiablePresentation");
-    expect(presentationResult.presentation.holder).toBe(identity.did);
-    expect(presentationResult.presentation.proof.challenge).toBe(nonce);
-    expect(presentationResult.presentation.proof.domain).toBe(domain);
+    expect(() =>
+      WalletService.createSelectivePresentation(
+        testCertNumber,
+        ["course_name"],
+        "verifier_challenge_nonce_999",
+        "https://verifier.example.test",
+        holderId
+      )
+    ).toThrow(/disabled/i);
   });
 
   it("7. exports AES-256-GCM encrypted vault backup and imports cleanly into new session", async () => {
