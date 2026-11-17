@@ -336,6 +336,9 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     expect(result.isValid).toBe(false);
     expect(result.status).toBe("INVALID");
     expect(result.checks.find((c) => c.code === "CHALLENGE_NONCE_VERIFICATION")?.passed).toBe(false);
+    expect(result.credential.recipientEmail).toBeUndefined();
+    expect(result.credential.recipientName).toBe("Undisclosed");
+    expect(result.credential.claims).toEqual({});
   });
 
   it("12. rejects presentations that have a valid credential but no holder proof", async () => {
@@ -352,6 +355,9 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     expect(result.isValid).toBe(false);
     expect(result.status).toBe("INVALID");
     expect(result.checks.find((c) => c.code === "HOLDER_PRESENTATION_SIGNATURE")?.passed).toBe(false);
+    expect(result.credential.recipientEmail).toBeUndefined();
+    expect(result.credential.recipientName).toBe("Undisclosed");
+    expect(result.credential.claims).toEqual({});
   });
 
   it("13. rejects a presentation signed for a different verifier audience", async () => {
