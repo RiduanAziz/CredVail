@@ -78,8 +78,11 @@ export class SelectiveDisclosureEngine {
    * Each claim is blinded with an independent 128-bit random salt and hashed via SHA-256.
    */
   static createDisclosurePackage(
-    claims: Record<string, string>
+    _claims: Record<string, string>
   ): SelectiveDisclosurePackage {
+    throw new Error(
+      "Custom salted-JSON disclosure tokens are disabled. Integrate a maintained W3C ecdsa-sd-2023 cryptosuite before issuing selective-disclosure credentials."
+    );
     const disclosures: Record<string, ClaimDisclosure> = {};
     const digests: string[] = [];
 
@@ -118,12 +121,15 @@ export class SelectiveDisclosureEngine {
    * attaching blinded digest commitments.
    */
   static attachSelectiveDisclosures(
-    vc: W3CVerifiableCredential,
-    claims: Record<string, string>
+    _vc: W3CVerifiableCredential,
+    _claims: Record<string, string>
   ): {
     credential: W3CVerifiableCredential;
     disclosures: Record<string, ClaimDisclosure>;
   } {
+    throw new Error(
+      "Selective-disclosure issuance is disabled until the credential is signed with a supported W3C Data Integrity cryptosuite."
+    );
     const pkg = this.createDisclosurePackage(claims);
 
     const sdCredential: W3CVerifiableCredential = {
@@ -148,13 +154,16 @@ export class SelectiveDisclosureEngine {
    * Signs with holder's private key bound to the verifier's challenge nonce.
    */
   static createSelectivePresentation(
-    input: SelectivePresentationInput
+    _input: SelectivePresentationInput
   ): {
     presentation: W3CVerifiablePresentation;
     disclosedClaims: Record<string, string>;
     undisclosedCount: number;
     wireSizeReductionPercent: number;
   } {
+    throw new Error(
+      "Selective-disclosure presentation generation is disabled. The current custom disclosure format is not interoperable or independently verifiable as ecdsa-sd-2023."
+    );
     const {
       baseCredential,
       disclosures,
@@ -263,150 +272,21 @@ export class SelectiveDisclosureEngine {
    * checks holder challenge nonce, and validates holder digital signature.
    */
   static verifySelectivePresentation(
-    presentation: W3CVerifiablePresentation,
-    holderPublicKeyPem: string,
-    expectedChallenge?: string,
-    expectedDomain?: string
+    _presentation: W3CVerifiablePresentation,
+    _holderPublicKeyPem: string,
+    _expectedChallenge?: string,
+    _expectedDomain?: string
   ): SelectiveDisclosureVerificationResult {
-    try {
-      // 1. Holder Proof Validation
-      if (!presentation.proof || !presentation.proof.jws) {
-        return {
-          isValid: false,
-          disclosedClaims: {},
-          blindedClaimCount: 0,
-          totalClaimCount: 0,
-          disclosedClaimCount: 0,
-          reductionPercentage: 0,
-          holderProofValid: false,
-          issuerSignatureValid: false,
-          error: "Presentation lacks holder proof or digital signature.",
-        };
-      }
-
-      // Check challenge nonce
-      if (expectedChallenge && presentation.proof.challenge !== expectedChallenge) {
-        return {
-          isValid: false,
-          disclosedClaims: {},
-          blindedClaimCount: 0,
-          totalClaimCount: 0,
-          disclosedClaimCount: 0,
-          reductionPercentage: 0,
-          holderProofValid: false,
-          issuerSignatureValid: false,
-          error: "Presentation challenge nonce mismatch (possible replay attack).",
-        };
-      }
-
-      // Check verifier domain if specified
-      if (expectedDomain && presentation.proof.domain && presentation.proof.domain !== expectedDomain) {
-        return {
-          isValid: false,
-          disclosedClaims: {},
-          blindedClaimCount: 0,
-          totalClaimCount: 0,
-          disclosedClaimCount: 0,
-          reductionPercentage: 0,
-          holderProofValid: false,
-          issuerSignatureValid: false,
-          error: "Presentation domain mismatch.",
-        };
-      }
-
-      // Verify holder signature
-      const { proof, ...vpPayload } = presentation;
-      const canonicalVp = canonicalizeJson(vpPayload);
-      const expectedSignedData = `${canonicalVp}.${proof.challenge}.${proof.domain || ""}`;
-      const holderProofValid = KeyService.verifySignature(
-        holderPublicKeyPem,
-        expectedSignedData,
-        proof.jws
-      );
-
-      if (!holderProofValid) {
-        return {
-          isValid: false,
-          disclosedClaims: {},
-          blindedClaimCount: 0,
-          totalClaimCount: 0,
-          disclosedClaimCount: 0,
-          reductionPercentage: 0,
-          holderProofValid: false,
-          issuerSignatureValid: false,
-          error: "Holder signature on Verifiable Presentation is invalid.",
-        };
-      }
-
-      // 2. Extract Embedded Credential & Disclosures
-      const vc = presentation.verifiableCredential?.[0] as any;
-      if (!vc) {
-        return {
-          isValid: false,
-          disclosedClaims: {},
-          blindedClaimCount: 0,
-          totalClaimCount: 0,
-          disclosedClaimCount: 0,
-          reductionPercentage: 0,
-          holderProofValid: true,
-          issuerSignatureValid: false,
-          error: "Presentation contains no embedded credentials.",
-        };
-      }
-
-      const subject = vc.credentialSubject || {};
-      const tokens = (subject._disclosures || []) as string[];
-      const disclosedClaims: Record<string, string> = {};
-
-      for (const token of tokens) {
-        try {
-          const jsonStr = Buffer.from(token, "base64url").toString("utf8");
-          const parsed = JSON.parse(jsonStr);
-          if (parsed.key && parsed.value !== undefined) {
-            disclosedClaims[parsed.key] = parsed.value;
-          }
-        } catch {
-          return {
-            isValid: false,
-            disclosedClaims: {},
-            blindedClaimCount: 0,
-            totalClaimCount: 0,
-            disclosedClaimCount: 0,
-            reductionPercentage: 0,
-            holderProofValid: true,
-            issuerSignatureValid: false,
-            error: "Failed to parse selective disclosure token.",
-          };
-        }
-      }
-
-      const disclosedCount = Object.keys(disclosedClaims).length;
-      const totalEstimated = Math.max(disclosedCount, 5); // baseline estimate if total count undisclosed
-      const blindedCount = totalEstimated - disclosedCount;
-      const reductionPercentage = Math.round((blindedCount / totalEstimated) * 100);
-
-      return {
-        isValid: true,
-        disclosedClaims,
-        blindedClaimCount: blindedCount,
-        totalClaimCount: totalEstimated,
-        disclosedClaimCount: disclosedCount,
-        reductionPercentage,
-        holderProofValid: true,
-        issuerSignatureValid: true,
-      };
-    } catch (err: any) {
-      return {
-        isValid: false,
-        disclosedClaims: {},
-        blindedClaimCount: 0,
-        totalClaimCount: 0,
-        disclosedClaimCount: 0,
-        reductionPercentage: 0,
-        holderProofValid: false,
-        issuerSignatureValid: false,
-        error: err.message || "Failed to verify selective disclosure presentation.",
-      };
-    }
+    return {
+      isValid: false,
+      disclosedClaims: {},
+      blindedClaimCount: 0,
+      totalClaimCount: 0,
+      disclosedClaimCount: 0,
+      reductionPercentage: 0,
+      holderProofValid: false,
+      issuerSignatureValid: false,
+      error: "Unsupported custom disclosure profile. Verification requires a maintained W3C ecdsa-sd-2023 implementation.",
+    };
   }
 }
