@@ -57,7 +57,10 @@ export interface CreateBatchInput {
 export class BatchRepository {
   private static inMemoryBatches = new Map<string, IssuanceBatchRecord>();
   private static inMemoryRecipients = new Map<string, Array<{ id: string; tenantId: string; email: string; fullName: string; certNumber?: string }>>();
-  private static useMemory = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static useMemory =
+    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+      ? false
+      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
 
   /**
    * Resets in-memory stores for hermetic test execution.

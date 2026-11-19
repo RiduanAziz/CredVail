@@ -34,6 +34,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import type { StoredWalletCredential } from "@/lib/wallet/wallet-service";
 import type { W3CVerifiablePresentation } from "@/lib/crypto/selective-disclosure";
 import type { VerificationResult } from "@/lib/services/verification-service";
+import { BrowserWalletEngine } from "@/lib/wallet/browser-wallet";
 
 export default function WalletPage() {
   const [loading, setLoading] = useState(true);
@@ -60,11 +61,36 @@ export default function WalletPage() {
   const fetchWalletCredentials = async () => {
     try {
       setLoading(true);
+      let browserDid = "";
+      try {
+        const browserId = await BrowserWalletEngine.getOrCreateBrowserIdentity();
+        browserDid = browserId.did;
+        setHolderInfo({ holderId: "client_vault", did: browserId.did });
+      } catch {
+        // Fallback for SSR
+      }
+
       const res = await fetch("/api/v1/wallet/credentials");
-      const json = await res.json();
-      if (json.success && json.data) {
-        setHolderInfo(json.data.holder);
-        setCredentials(json.data.credentials);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.data) {
+          setHolderInfo({
+            holderId: json.data.holder.holderId,
+            did: browserDid || json.data.holder.did || "did:key:client_managed",
+          });
+          setCredentials(json.data.credentials);
+          return;
+        }
+      }
+
+      // If server session is unauthenticated, fallback to client-side IndexedDB vault
+      try {
+        const clientCreds = await BrowserWalletEngine.listCredentials();
+        if (clientCreds && clientCreds.length > 0) {
+          setCredentials(clientCreds as any);
+        }
+      } catch {
+        // IndexedDB unavailable
       }
     } catch (err) {
       console.error("Failed to load wallet:", err);
@@ -133,32 +159,21 @@ export default function WalletPage() {
     try {
       setGeneratingVp(true);
       setVpVerifyResult(null);
+      setPresentationError(null);
 
-      const res = await fetch("/api/v1/wallet/present", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          credentialId: selectedCred.credentialId,
-          disclosedKeys: Array.from(disclosedKeys),
-          challengeNonce,
-          verifierDomain: verifierAudience,
-        }),
+      const audience = verifierAudience || (typeof window !== "undefined" ? window.location.origin : "");
+      const vp = await BrowserWalletEngine.createAndSignPresentation({
+        credential: selectedCred as any,
+        challengeNonce,
+        verifierDomain: audience,
       });
 
-      const json = await res.json();
-      if (json.success && json.data) {
-        setGeneratedVp(json.data.presentation);
-        setReductionPercent(json.data.wireSizeReductionPercent);
-      } else {
-        setPresentationError(
-          json.message || json.error?.message ||
-          "Selective disclosure is temporarily disabled while CREDVAIL integrates a standards-compliant W3C cryptosuite."
-        );
-      }
+      setGeneratedVp(vp as any);
+      setReductionPercent(0);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown presentation error";
       setPresentationError(message);
-      console.error("Failed to generate presentation:", err);
+      console.error("Failed to generate browser presentation:", err);
     } finally {
       setGeneratingVp(false);
     }
@@ -169,18 +184,28 @@ export default function WalletPage() {
 
     try {
       setVerifyingVp(true);
-      const res = await fetch("/api/v1/verify/presentation", {
+      const res = await fetch("/api/v1/wallet/present", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           presentation: generatedVp,
-          nonce: challengeNonce,
+          challengeNonce,
         }),
       });
 
       const json = await res.json();
       if (json.success && json.data) {
-        setVpVerifyResult(json.data);
+        setVpVerifyResult(json.data.verificationResult || json.data);
+      } else {
+        setVpVerifyResult(
+          json.data || {
+            isValid: false,
+            status: "INVALID",
+            verificationLatencyMs: 0,
+            checks: [],
+            warnings: [json.message || "Presentation verification failed."],
+          } as any
+        );
       }
     } catch (err) {
       console.error("Failed to verify presentation:", err);

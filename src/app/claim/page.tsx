@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Wallet,
@@ -14,25 +14,61 @@ import {
   Sparkles,
   ArrowLeft,
   Lock,
+  Key,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { StoredWalletCredential } from "@/lib/wallet/wallet-service";
+import { BrowserWalletEngine } from "@/lib/wallet/browser-wallet";
 
-export default function ClaimCredentialPage() {
+function ClaimCredentialContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [certNumber, setCertNumber] = useState("");
-  const [email, setEmail] = useState("");
+  const [claimToken, setClaimToken] = useState("");
   const [claiming, setClaiming] = useState(false);
   const [claimedCred, setClaimedCred] = useState<StoredWalletCredential | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const certParam = searchParams.get("cert") || searchParams.get("certificateNumber");
+    if (certParam) setCertNumber(certParam);
+
+    // Secure URL fragment handling: token is placed in URL hash (#token=...) to prevent
+    // server-side access logs, referrers, and HTTP request leakage.
+    let tokenFromHash = "";
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hash = window.location.hash.startsWith("#")
+        ? window.location.hash.substring(1)
+        : window.location.hash;
+      const hashParams = new URLSearchParams(hash);
+      tokenFromHash = hashParams.get("token") || hashParams.get("claimToken") || "";
+
+      if (tokenFromHash) {
+        setClaimToken(tokenFromHash);
+
+        // Immediately scrub the secret token from browser address bar & history
+        if (window.history && window.history.replaceState) {
+          const cleanUrl =
+            window.location.pathname +
+            (window.location.search ? window.location.search : "");
+          window.history.replaceState(null, "", cleanUrl);
+        }
+      }
+    }
+
+    if (!tokenFromHash) {
+      const tokenParam = searchParams.get("token") || searchParams.get("claimToken");
+      if (tokenParam) setClaimToken(tokenParam);
+    }
+  }, [searchParams]);
+
   const handleClaimSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!certNumber.trim() || !email.trim()) {
-      setError("Please provide both certificate number and recipient email.");
+    if (!certNumber.trim() || !claimToken.trim()) {
+      setError("Please provide both certificate number and your single-use claim token.");
       return;
     }
 
@@ -40,18 +76,51 @@ export default function ClaimCredentialPage() {
       setClaiming(true);
       setError(null);
 
+      // Get or create client-side browser identity
+      let holderDid: string | undefined;
+      try {
+        const clientIdentity = await BrowserWalletEngine.getOrCreateBrowserIdentity();
+        holderDid = clientIdentity.did;
+      } catch {
+        // Fallback if indexedDB unavailable in restricted sandbox
+      }
+
       const res = await fetch("/api/v1/wallet/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           certificateNumber: certNumber.trim(),
-          recipientEmail: email.trim(),
+          claimToken: claimToken.trim(),
+          holderDid,
         }),
       });
 
       const json = await res.json();
+      if (res.status === 401) {
+        setError("You must be signed in to your CREDVAIL account to claim this credential.");
+        return;
+      }
+
       if (json.success && json.data) {
         setClaimedCred(json.data);
+
+        // Save credential into client-side browser IndexedDB vault
+        try {
+          await BrowserWalletEngine.saveCredential({
+            credentialId: json.data.credentialId,
+            certificateNumber: json.data.certificateNumber,
+            recipientName: json.data.recipientName,
+            recipientEmail: json.data.recipientEmail,
+            courseName: json.data.courseName,
+            issuerName: json.data.issuerName,
+            issuerDid: json.data.issuerDid,
+            claims: json.data.claims,
+            rawVc: json.data.rawVc,
+            claimedAt: json.data.claimedAt,
+          });
+        } catch {
+          // In-memory/SSR fallback
+        }
       } else {
         setError(json.message || "Failed to claim credential.");
       }
@@ -73,7 +142,7 @@ export default function ClaimCredentialPage() {
           </Link>
           <Badge variant="outline" className="font-mono text-xs border-primary/30 text-primary gap-1">
             <Sparkles className="w-3 h-3" />
-            Phase 11: Self-Sovereign Identity
+            H1: Cryptographic Ownership
           </Badge>
         </div>
 
@@ -86,7 +155,7 @@ export default function ClaimCredentialPage() {
             Claim Your Digital Credential
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto">
-            Import your verifiable credential into your private browser wallet with cryptographic selective disclosure keys.
+            Import your verifiable credential into your private browser wallet using your single-use institutional claim token.
           </p>
         </div>
 
@@ -96,7 +165,7 @@ export default function ClaimCredentialPage() {
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-bold">Ownership Verification</CardTitle>
               <CardDescription className="text-xs">
-                Enter your unique certificate number and the recipient email address on file with the issuing institution.
+                Enter your unique certificate number and the high-entropy claim invitation token issued to you by the organization.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -117,18 +186,24 @@ export default function ClaimCredentialPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="email" className="text-xs font-semibold text-foreground">
-                    Recipient Email Address
-                  </label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="e.g. evelyn.reed@stanford.edu"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="text-sm"
-                    required
-                  />
+                  <div className="flex items-center justify-between">
+                    <label htmlFor="claim-token" className="text-xs font-semibold text-foreground">
+                      Single-Use Claim Invitation Token
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">High-entropy cryptographic token</span>
+                  </div>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="claim-token"
+                      type="password"
+                      placeholder="Enter 64-character token from your invitation"
+                      value={claimToken}
+                      onChange={(e) => setClaimToken(e.target.value)}
+                      className="pl-9 font-mono text-sm"
+                      required
+                    />
+                  </div>
                 </div>
 
                 {error && (
@@ -166,40 +241,37 @@ export default function ClaimCredentialPage() {
                 Credential Successfully Claimed!
               </CardTitle>
               <CardDescription className="text-xs text-emerald-800 dark:text-emerald-200">
-                Cryptographic selective disclosure tokens have been generated and secured in your wallet vault.
+                Ownership verified and secured in your private browser wallet vault.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-2">
-              <div className="p-4 rounded-xl bg-background border border-border space-y-3 text-xs">
+            <CardContent className="space-y-4">
+              <div className="p-4 rounded-xl bg-background border border-emerald-500/20 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Achievement:</span>
-                  <span className="font-bold text-foreground">{claimedCred.courseName}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Issuing University:</span>
-                  <span className="font-semibold text-foreground">{claimedCred.issuerName}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Recipient Name:</span>
-                  <span className="font-semibold text-foreground">{claimedCred.recipientName}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Certificate Number:</span>
-                  <span className="font-mono font-bold text-primary">{claimedCred.certificateNumber}</span>
-                </div>
-                <div className="flex items-center justify-between border-t pt-2">
-                  <span className="text-muted-foreground">Blinded Attribute Salts:</span>
-                  <Badge variant="outline" className="font-mono text-[10px] border-emerald-500/40 text-emerald-600">
-                    {Object.keys(claimedCred.disclosures).length} Salts Ready
+                  <Badge variant="outline" className="font-mono text-xs border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
+                    {claimedCred.certificateNumber}
                   </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    Claimed {new Date(claimedCred.claimedAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-base font-serif">{claimedCred.courseName}</h3>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                    <Building2 className="w-3.5 h-3.5" />
+                    <span>{claimedCred.issuerName}</span>
+                  </p>
+                </div>
+                <div className="text-xs pt-2 border-t border-border flex items-center justify-between text-muted-foreground">
+                  <span>Recipient: <strong className="text-foreground">{claimedCred.recipientName}</strong></span>
+                  <span className="font-mono text-[10px]">{claimedCred.recipientEmail}</span>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-3">
                 <Link href="/wallet" className="flex-1">
-                  <Button className="w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Wallet className="w-4 h-4" />
-                    <span>Open in Wallet</span>
+                  <Button variant="brand" className="w-full gap-2">
+                    <span>Open Holder Wallet</span>
+                    <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
                 <Button
@@ -207,9 +279,9 @@ export default function ClaimCredentialPage() {
                   onClick={() => {
                     setClaimedCred(null);
                     setCertNumber("");
-                    setEmail("");
+                    setClaimToken("");
                   }}
-                  className="text-xs"
+                  className="gap-2"
                 >
                   Claim Another
                 </Button>
@@ -217,15 +289,21 @@ export default function ClaimCredentialPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* Privacy Callout */}
-        <div className="p-4 rounded-xl border border-border bg-card/60 flex items-start gap-3 text-xs text-muted-foreground">
-          <Lock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-          <p>
-            Your browser wallet uses client-side encryption. Private keys and selective disclosure blinding salts never leave your device without explicit cryptographic consent.
-          </p>
-        </div>
       </div>
     </div>
+  );
+}
+
+export default function ClaimCredentialPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+          Loading claim portal...
+        </div>
+      }
+    >
+      <ClaimCredentialContent />
+    </Suspense>
   );
 }

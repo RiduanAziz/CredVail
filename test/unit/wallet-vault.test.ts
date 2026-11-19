@@ -8,6 +8,9 @@ import { KeyRepository } from "@/lib/repositories/key-repository";
 import { KeyService } from "@/lib/crypto/key-service";
 import { VcService } from "@/lib/crypto/vc-service";
 import { TEMPLATE_PRESETS } from "@/lib/templates/presets";
+import { ClaimInvitationRepository } from "@/lib/repositories/claim-invitation-repository";
+import { ClaimInvitationService } from "@/lib/services/claim-invitation-service";
+import { BrowserWalletEngine } from "@/lib/wallet/browser-wallet";
 
 describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
   let tenantId = "ten_wallet_test_001";
@@ -15,10 +18,12 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
   const holderId = "holder_student_01";
   const testCertNumber = "WLT-2026-8888";
   const studentEmail = "student@wallet.test";
+  let testClaimToken: string;
 
   beforeEach(async () => {
     WalletService.resetInMemoryStore();
     CredentialRepository.resetInMemoryStore();
+    ClaimInvitationRepository.resetInMemoryStore();
     inMemoryTenantStore.clear();
     TemplateRepository.resetInMemoryStore();
     BatchRepository.resetInMemoryStore();
@@ -108,24 +113,45 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
       },
       vcPayloadJson: signedVc as any,
     });
+
+    // Create single-use high-entropy claim invitation
+    const invite = await ClaimInvitationService.createInvitation({
+      credentialId: "urn:uuid:cred-wallet-001",
+      certificateNumber: testCertNumber,
+      recipientEmail: studentEmail,
+      tenantId,
+    });
+    testClaimToken = invite.rawToken;
   });
 
-  it("1. generates deterministic holder identity with ECDSA P-256 key and did:key format", () => {
-    const id1 = WalletService.getOrCreateHolderIdentity(holderId);
-    expect(id1.holderId).toBe(holderId);
-    expect(id1.did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
-    expect(id1.keyPair.publicKeyPem).toContain("BEGIN PUBLIC KEY");
-    expect(id1.keyPair.privateKeyPem).toContain("BEGIN PRIVATE KEY");
+  it("1. generates deterministic independent holder identity with ECDSA P-256 key and did:key format in browser, rejecting server custody", async () => {
+    // 1. Calling server-side holder identity creation must fail closed
+    expect(() => WalletService.getOrCreateHolderIdentity("holder_alice")).toThrow(
+      /deprecated and removed/i
+    );
 
-    // Idempotency: subsequent call returns identical identity
-    const id2 = WalletService.getOrCreateHolderIdentity(holderId);
-    expect(id2.did).toBe(id1.did);
-    expect(id2.keyPair.publicKeyMultibase).toBe(id1.keyPair.publicKeyMultibase);
+    // 2. Client-side BrowserWalletEngine generates valid non-extractable identity
+    const id1 = await BrowserWalletEngine.generateHolderIdentity();
+    expect(id1.did).toMatch(/^did:key:zDna[1-9A-HJ-NP-Za-km-z]+$/);
+    expect(id1.publicKeyJwk.kty).toBe("EC");
+    expect(id1.publicKeyJwk.crv).toBe("P-256");
+    expect(id1.privateKey.extractable).toBe(false);
+
+    // Two distinct holders must NEVER receive the same private key
+    const id2 = await BrowserWalletEngine.generateHolderIdentity();
+    expect(id2.did).not.toBe(id1.did);
+    expect(id2.publicKeyJwk.x).not.toBe(id1.publicKeyJwk.x);
+    expect(id2.privateKey).not.toBe(id1.privateKey);
   });
 
-  it("2. claims issued credential by verifying recipient email without unsupported legacy disclosure generation", async () => {
+  it("2. claims issued credential using high-entropy claim token bound to recipient email", async () => {
     const claimed = await WalletService.claimCredential(
-      { certificateNumber: testCertNumber, recipientEmail: studentEmail },
+      {
+        certificateNumber: testCertNumber,
+        claimToken: testClaimToken,
+        recipientEmail: studentEmail,
+        userEmailVerified: true,
+      },
       holderId
     );
 
@@ -143,7 +169,11 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
   it("3. rejects claiming with non-existent certificate number", async () => {
     await expect(
       WalletService.claimCredential(
-        { certificateNumber: "NON-EXISTENT-CERT", recipientEmail: studentEmail },
+        {
+          certificateNumber: "NON-EXISTENT-CERT",
+          claimToken: testClaimToken,
+          recipientEmail: studentEmail,
+        },
         holderId
       )
     ).rejects.toThrow("not found");
@@ -152,15 +182,59 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
   it("4. rejects claiming when recipient email does not match credential subject (identity binding)", async () => {
     await expect(
       WalletService.claimCredential(
-        { certificateNumber: testCertNumber, recipientEmail: "imposter@malicious.com" },
+        {
+          certificateNumber: testCertNumber,
+          claimToken: testClaimToken,
+          userEmail: "imposter@malicious.com",
+        },
         holderId
       )
-    ).rejects.toThrow("Email verification failed");
+    ).rejects.toThrow(/Ownership verification failed/i);
   });
 
-  it("5. lists and retrieves credentials, and deletes credential on holder request", async () => {
+  it("5. rejects claiming by merely supplying recipient email without a claim token", async () => {
+    await expect(
+      WalletService.claimCredential(
+        { certificateNumber: testCertNumber, recipientEmail: studentEmail },
+        holderId
+      )
+    ).rejects.toThrow(/single-use claim invitation token is required/i);
+  });
+
+  it("6. rejects replaying an already consumed claim invitation token", async () => {
+    // First claim succeeds
     await WalletService.claimCredential(
-      { certificateNumber: testCertNumber, recipientEmail: studentEmail },
+      {
+        certificateNumber: testCertNumber,
+        claimToken: testClaimToken,
+        recipientEmail: studentEmail,
+        userEmailVerified: true,
+      },
+      holderId
+    );
+
+    // Second claim with identical token fails (anti-replay)
+    await expect(
+      WalletService.claimCredential(
+        {
+          certificateNumber: testCertNumber,
+          claimToken: testClaimToken,
+          recipientEmail: studentEmail,
+          userEmailVerified: true,
+        },
+        "attacker_holder"
+      )
+    ).rejects.toThrow(/already been consumed/i);
+  });
+
+  it("7. lists and retrieves credentials, and deletes credential on holder request", async () => {
+    await WalletService.claimCredential(
+      {
+        certificateNumber: testCertNumber,
+        claimToken: testClaimToken,
+        recipientEmail: studentEmail,
+        userEmailVerified: true,
+      },
       holderId
     );
 
@@ -181,9 +255,14 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(emptyList.length).toBe(0);
   });
 
-  it("6. refuses to create a presentation with the legacy custom disclosure format", async () => {
+  it("8. refuses to create a presentation with the legacy custom disclosure format", async () => {
     await WalletService.claimCredential(
-      { certificateNumber: testCertNumber, recipientEmail: studentEmail },
+      {
+        certificateNumber: testCertNumber,
+        claimToken: testClaimToken,
+        recipientEmail: studentEmail,
+        userEmailVerified: true,
+      },
       holderId
     );
 
@@ -198,9 +277,14 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     ).toThrow(/disabled/i);
   });
 
-  it("7. exports AES-256-GCM encrypted vault backup and imports cleanly into new session", async () => {
+  it("9. exports PBKDF2-HMAC-SHA256 encrypted vault backup and imports cleanly into new session", async () => {
     await WalletService.claimCredential(
-      { certificateNumber: testCertNumber, recipientEmail: studentEmail },
+      {
+        certificateNumber: testCertNumber,
+        claimToken: testClaimToken,
+        recipientEmail: studentEmail,
+        userEmailVerified: true,
+      },
       holderId
     );
 
@@ -211,9 +295,16 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(encryptedBackup).toBeDefined();
 
     const backupObj = JSON.parse(encryptedBackup);
-    expect(backupObj.iv).toBeDefined();
-    expect(backupObj.tag).toBeDefined();
-    expect(backupObj.data).toBeDefined();
+    expect(backupObj.version).toBe(1);
+    expect(backupObj.kdf.algorithm).toBe("PBKDF2");
+    expect(backupObj.kdf.iterations).toBe(600000);
+    expect(backupObj.kdf.salt).toBeDefined();
+    expect(backupObj.cipher.algorithm).toBe("AES-256-GCM");
+    expect(backupObj.cipher.iv).toBeDefined();
+    expect(backupObj.cipher.tag).toBeDefined();
+
+    // Rejects empty passphrase
+    expect(() => WalletService.exportVaultBackup(holderId, "")).toThrow(/non-empty passphrase/i);
 
     // Restore into a fresh holder vault
     const newHolderId = "holder_restored_02";
@@ -228,5 +319,10 @@ describe("Phase 11: Holder Wallet & Client Vault Unit Tests", () => {
     expect(() => {
       WalletService.importVaultBackup(encryptedBackup, "holder_fail", "wrong_passphrase");
     }).toThrow();
+
+    // Assert empty passphrase on import throws
+    expect(() => {
+      WalletService.importVaultBackup(encryptedBackup, "holder_fail", "");
+    }).toThrow(/passphrase is required/i);
   });
 });

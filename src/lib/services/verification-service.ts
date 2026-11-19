@@ -51,6 +51,32 @@ export interface VerificationCheckStep {
   error?: string;
 }
 
+export interface PublicSafeCredentialDto {
+  id: string;
+  certificateNumber: string;
+  recipientName: string;
+  courseName: string;
+  issueDate: string;
+  expirationDate?: string | null;
+  issuerName: string;
+  issuerDid: string;
+  state: string;
+}
+
+export interface PublicVerificationResult {
+  status: VerificationStatus;
+  isValid: boolean;
+  freshnessOutcome?: "VALID_CURRENT" | "REVOKED" | "AUTHENTICITY_ONLY" | "STATUS_UNKNOWN" | "INVALID";
+  verifiedAt: string;
+  verificationLatencyMs: number;
+  credential: PublicSafeCredentialDto;
+  issuer: VerificationResult["issuer"];
+  cryptography: VerificationResult["cryptography"];
+  blockchain: VerificationResult["blockchain"];
+  checks: VerificationResult["checks"];
+  warnings: string[];
+}
+
 export interface VerificationResult {
   status: VerificationStatus;
   isValid: boolean;
@@ -176,6 +202,57 @@ export class VerificationService {
   }
 
   /**
+   * Sanitizes a verification result into a public-safe DTO.
+   * Explicitly strips recipientEmail and all private claims dictionaries.
+   */
+  static toPublicVerificationResult(result: VerificationResult): PublicVerificationResult {
+    // Sanitize checks to completely strip internal database IDs, tenant UUIDs, and private metadata
+    const sanitizedChecks = result.checks.map((check) => {
+      if (check.details && typeof check.details === "object") {
+        const { tenantId, id, internalId, recipientId, batchId, ...cleanDetails } = check.details as any;
+        return {
+          ...check,
+          details: Object.keys(cleanDetails).length > 0 ? cleanDetails : undefined,
+        };
+      }
+      return check;
+    });
+
+    return {
+      status: result.status,
+      isValid: result.isValid,
+      freshnessOutcome: result.freshnessOutcome,
+      verifiedAt: result.verifiedAt,
+      verificationLatencyMs: result.verificationLatencyMs,
+      credential: {
+        id: result.credential.id,
+        certificateNumber: result.credential.certificateNumber,
+        recipientName: result.credential.recipientName,
+        courseName: result.credential.courseName,
+        issueDate: result.credential.issueDate,
+        expirationDate: result.credential.expirationDate,
+        issuerName: result.credential.issuerName,
+        issuerDid: result.credential.issuerDid,
+        state: result.credential.state,
+      },
+      issuer: result.issuer,
+      cryptography: result.cryptography,
+      blockchain: result.blockchain,
+      checks: sanitizedChecks,
+      warnings: result.warnings || [],
+    };
+  }
+
+  /**
+   * Public-safe verification lookup.
+   * Resolves the credential and maps to the public-safe DTO.
+   */
+  static async verifyPublicSafe(publicId: string): Promise<PublicVerificationResult> {
+    const fullResult = await this.verifyByPublicId(publicId);
+    return this.toPublicVerificationResult(fullResult);
+  }
+
+  /**
    * Primary verification entry point: verifies any credential by public identifier
    * (certificate number, UUID, URN, or internal ID) without requiring a tenant session.
    */
@@ -250,7 +327,6 @@ export class VerificationService {
       details: {
         credentialId: cred.credentialId,
         certificateNumber: cred.certificateNumber,
-        tenantId: cred.tenantId,
       },
     });
 

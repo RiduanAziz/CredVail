@@ -293,8 +293,34 @@ export default function BatchesPage({
       const json = await res.json();
       if (json.success) {
         setSuccessMsg(
-          `Successfully generated ${json.data.totalProcessed} certificates for Batch ${json.data.batchNumber}! Print-ready PDFs and bulk ZIP archive are ready.`
+          `Successfully generated ${json.data.totalProcessed} certificates for Batch ${json.data.batchNumber}! Print-ready PDFs and bulk ZIP archive are ready. Claim links have been downloaded.`
         );
+
+        // Workstream 3 (Option A): Immediate authenticated delivery
+        // Download claim links CSV directly from the authenticated batch processing response
+        if (json.data.claimLinks && json.data.claimLinks.length > 0 && typeof window !== "undefined") {
+          try {
+            const csvHeader = "Recipient Name,Recipient Email,Certificate Number,Claim URL\n";
+            const csvRows = json.data.claimLinks
+              .map(
+                (c: any) =>
+                  `"${(c.recipientName || "").replace(/"/g, '""')}","${(c.recipientEmail || "").replace(/"/g, '""')}","${c.certificateNumber}","${c.claimUrl}"`
+              )
+              .join("\n");
+            const blob = new Blob([csvHeader + csvRows], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `Batch_${json.data.batchNumber}_claim_links.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          } catch {
+            // Non-blocking in case of restricted environment
+          }
+        }
+
         loadInitialData();
         if (selectedBatchDetails?.id === batchId) {
           setSelectedBatchDetails({

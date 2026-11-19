@@ -16,6 +16,7 @@ export interface SessionPayload {
   tenants: SessionTenantInfo[];
   currentTenantId?: string;
   currentTenantRole?: TenantRole;
+  emailVerified?: boolean; // Fail-closed: only explicit `true` permits claims
   iat: number;
   exp: number;
   jti: string;
@@ -46,6 +47,8 @@ export function createSessionToken(
     email: string;
     fullName: string;
     platformRole: PlatformRole;
+    emailVerified?: boolean | null;
+    emailVerifiedAt?: Date | string | null;
     memberships?: Array<{
       tenantId: string;
       role: TenantRole;
@@ -64,6 +67,13 @@ export function createSessionToken(
 
   const activeTenant = tenants.find((t) => t.tenantId === activeTenantId) || tenants[0];
 
+  // Strictly fail-closed email verification:
+  // ONLY an explicit boolean `true` or a valid non-null `emailVerifiedAt` timestamp establishes verification.
+  // Missing (undefined), null, false, or any other value strictly evaluates to false.
+  const isEmailVerified =
+    user.emailVerified === true ||
+    (user.emailVerifiedAt !== undefined && user.emailVerifiedAt !== null);
+
   const payload: SessionPayload = {
     sub: user.id,
     email: user.email,
@@ -72,6 +82,7 @@ export function createSessionToken(
     tenants,
     currentTenantId: activeTenant?.tenantId,
     currentTenantRole: activeTenant?.role,
+    emailVerified: isEmailVerified,
     iat: now,
     exp: now + SESSION_DURATION_SECONDS,
     jti: crypto.randomBytes(16).toString("hex"),

@@ -19,6 +19,7 @@ import { BlockchainService } from "@/lib/blockchain/blockchain-service";
 import { CredentialRepository } from "@/lib/repositories/credential-repository";
 import { TenantRepository, inMemoryTenantStore } from "@/lib/repositories/tenant-repository";
 import { sanitizeFormulaValue } from "@/lib/csv/spreadsheet-parser";
+import { ClaimInvitationService } from "@/lib/services/claim-invitation-service";
 
 describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", () => {
   let tenantId = "tnt_benchmark_univ";
@@ -169,9 +170,16 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
 
   // METRIC M2 (BLOCKED / NOT MEASURED): Selective Disclosure Wire Efficiency
   it("Metric M2 (BLOCKED / NOT MEASURED): Rejects unsupported selective-presentation creation pending standards-compliant cryptosuite", async () => {
-    // 1. Claim into wallet
+    // 1. Claim into wallet with single-use invitation
+    const invite = await ClaimInvitationService.createInvitation({
+      credentialId: "urn:uuid:bench-0001",
+      certificateNumber,
+      recipientEmail,
+      tenantId,
+    });
+
     await WalletService.claimCredential(
-      { certificateNumber, recipientEmail },
+      { certificateNumber, claimToken: invite.rawToken, recipientEmail, userEmailVerified: true },
       "bench_holder"
     );
 

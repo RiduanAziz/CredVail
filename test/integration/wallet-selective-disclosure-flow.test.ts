@@ -2,16 +2,20 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { WalletService } from "@/lib/wallet/wallet-service";
 import { TenantRepository, inMemoryTenantStore } from "@/lib/repositories/tenant-repository";
 import { CredentialRepository } from "@/lib/repositories/credential-repository";
+import { ClaimInvitationRepository } from "@/lib/repositories/claim-invitation-repository";
+import { ClaimInvitationService } from "@/lib/services/claim-invitation-service";
 
 describe("Phase 11 security gate: wallet does not issue non-standard selective presentations", () => {
   const tenantSlug = "selective-security-tenant";
   const holderId = "holder_selective_security";
   const certificateNumber = "CREDVAIL-SD-SEC-001";
   const recipientEmail = "holder@example.test";
+  let claimToken: string;
 
   beforeEach(async () => {
     WalletService.resetInMemoryStore();
     CredentialRepository.resetInMemoryStore();
+    ClaimInvitationRepository.resetInMemoryStore();
     inMemoryTenantStore.clear();
 
     const tenantRepo = new TenantRepository();
@@ -37,11 +41,19 @@ describe("Phase 11 security gate: wallet does not issue non-standard selective p
       claimsData: { course_name: "Security Engineering", grade: "A" },
       vcPayloadJson: { id: "urn:uuid:selective-security-001" },
     });
+
+    const invite = await ClaimInvitationService.createInvitation({
+      credentialId: "urn:uuid:selective-security-001",
+      certificateNumber,
+      recipientEmail,
+      tenantId: tenant.id,
+    });
+    claimToken = invite.rawToken;
   });
 
-  it("allows credential claiming but does not generate legacy disclosure tokens", async () => {
+  it("allows credential claiming with valid invitation token but does not generate legacy disclosure tokens", async () => {
     const claimed = await WalletService.claimCredential(
-      { certificateNumber, recipientEmail },
+      { certificateNumber, claimToken, recipientEmail, userEmailVerified: true },
       holderId
     );
 
@@ -52,7 +64,7 @@ describe("Phase 11 security gate: wallet does not issue non-standard selective p
 
   it("rejects selective presentation generation until the W3C cryptosuite is integrated", async () => {
     await WalletService.claimCredential(
-      { certificateNumber, recipientEmail },
+      { certificateNumber, claimToken, recipientEmail, userEmailVerified: true },
       holderId
     );
 

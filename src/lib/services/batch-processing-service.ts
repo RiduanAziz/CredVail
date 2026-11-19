@@ -27,6 +27,15 @@ import { assertTenantPermission } from "../auth/rbac.ts";
 import type { SessionPayload } from "../auth/session.ts";
 import { TEMPLATE_PRESETS } from "../templates/presets.ts";
 import type { MerkleInclusionProof } from "../../types/index.ts";
+import { ClaimInvitationService } from "./claim-invitation-service.ts";
+
+export interface BatchClaimLink {
+  certificateNumber: string;
+  recipientName: string;
+  recipientEmail: string;
+  claimUrl: string;
+  claimToken: string;
+}
 
 export interface BatchProcessingResult {
   batchId: string;
@@ -43,7 +52,10 @@ export interface BatchProcessingResult {
     leafHash: string;
     merkleProof?: MerkleInclusionProof;
     verificationUrl: string;
+    claimUrl?: string;
+    claimToken?: string;
   }>;
+  claimLinks?: BatchClaimLink[];
   zipSize: number;
   processedAt: string;
 }
@@ -51,6 +63,80 @@ export interface BatchProcessingResult {
 export class BatchProcessingService {
   private static tenantRepo = new TenantRepository();
   private static templateRepo = new TemplateRepository();
+  private static batchClaimExports = new Map<
+    string,
+    {
+      tenantId: string;
+      batchId: string;
+      batchNumber: string;
+      claimLinks: BatchClaimLink[];
+      exportCsv: string;
+      createdAt: number;
+    }
+  >();
+
+  /**
+   * Resets in-memory export cache (for test hermeticity).
+   */
+  static resetExportStore(): void {
+    this.batchClaimExports.clear();
+  }
+
+  /**
+   * Clears claim export for a batch (e.g. upon failure or expiration).
+   */
+  static clearBatchClaimExport(batchId: string): void {
+    this.batchClaimExports.delete(batchId);
+  }
+
+  /**
+   * Retrieves authorized batch claim links and CSV export for an authorized tenant member.
+   *
+   * DELIVERY ARCHITECTURE (Option A Primary, Transient Secondary):
+   * - Authoritative Delivery Channel: The authenticated `POST .../batches/:id/process` response.
+   *   The issuer UI directly consumes and downloads the claim links immediately upon generation.
+   * - Secondary Transient Cache: This endpoint reads from a short-lived process-local cache
+   *   with an explicit 15-minute TTL. It is single-process only.
+   */
+  static async getBatchClaimExport(
+    tenantSlug: string,
+    batchId: string,
+    session?: SessionPayload
+  ): Promise<{
+    batchId: string;
+    batchNumber: string;
+    claimLinks: BatchClaimLink[];
+    exportCsv: string;
+    createdAt: string;
+  }> {
+    const { tenant, role } = await this.resolveTenantContext(tenantSlug, session);
+    assertTenantPermission(role, "batches:create");
+
+    const batch = await BatchRepository.findBatchById(tenant.id, batchId);
+    if (!batch) {
+      throw new Error(`Batch with ID "${batchId}" not found for this institution.`);
+    }
+
+    const exportData = this.batchClaimExports.get(batchId);
+    if (!exportData || exportData.tenantId !== tenant.id) {
+      throw new Error(`Claim delivery export for batch "${batch.batchNumber}" is not available or has expired. Please use the authoritative claim links returned in the batch processing response.`);
+    }
+
+    // Explicit 15-minute retention policy for process-local export cache
+    const CLAIM_EXPORT_TTL_MS = 15 * 60 * 1000;
+    if (Date.now() - exportData.createdAt > CLAIM_EXPORT_TTL_MS) {
+      this.batchClaimExports.delete(batchId);
+      throw new Error(`Claim delivery export for batch "${batch.batchNumber}" has expired (15-minute retention limit exceeded).`);
+    }
+
+    return {
+      batchId: exportData.batchId,
+      batchNumber: exportData.batchNumber,
+      claimLinks: exportData.claimLinks,
+      exportCsv: exportData.exportCsv,
+      createdAt: new Date(exportData.createdAt).toISOString(),
+    };
+  }
 
   /**
    * Resolves tenant context and verifies authorization.
@@ -153,6 +239,7 @@ export class BatchProcessingService {
 
     const generatedCredentials: BatchProcessingResult["credentials"] = [];
     const zipFiles: ZipFileInput[] = [];
+    const claimLinks: BatchClaimLink[] = [];
 
     interface StagedItem {
       recipient: StagedRecipientData;
@@ -282,6 +369,27 @@ export class BatchProcessingService {
           merkleProof,
         });
 
+        // Automatically create single-use claim invitation for recipient
+        const invite = await ClaimInvitationService.createInvitation({
+          credentialId: item.credentialId,
+          certificateNumber: item.certNumber,
+          recipientEmail: item.recipient.email,
+          tenantId: tenant.id,
+        });
+
+        const rawToken = invite.rawToken;
+        // Secure URL fragment: token resides strictly in URL hash (#token=...) to prevent
+        // leakage in web server access logs, reverse proxies, and HTTP referrers.
+        const claimUrl = `${baseUrl}/claim?cert=${encodeURIComponent(item.certNumber)}#token=${rawToken}`;
+
+        claimLinks.push({
+          certificateNumber: item.certNumber,
+          recipientName: item.recipient.fullName,
+          recipientEmail: item.recipient.email,
+          claimUrl,
+          claimToken: rawToken,
+        });
+
         generatedCredentials.push({
           id: credRecord.id,
           credentialId: item.credentialId,
@@ -291,6 +399,8 @@ export class BatchProcessingService {
           leafHash: item.leafHash,
           merkleProof,
           verificationUrl: item.verificationUrl,
+          claimUrl,
+          claimToken: rawToken,
         });
 
         // Prepare file for ZIP archive
@@ -305,12 +415,31 @@ export class BatchProcessingService {
       const zipArchiveBytes = ZipService.createBatchArchive(zipFiles);
       CredentialRepository.storeBatchZip(batch.id, zipArchiveBytes);
 
-      // 5. Update Batch Status to GENERATED with Merkle Root
+      // 5. Store temporary in-memory claim delivery export for authorized tenant members
+      const csvHeader = "Recipient Name,Recipient Email,Certificate Number,Claim URL\n";
+      const csvRows = claimLinks
+        .map(
+          (c) =>
+            `"${c.recipientName.replace(/"/g, '""')}","${c.recipientEmail.replace(/"/g, '""')}","${c.certificateNumber}","${c.claimUrl}"`
+        )
+        .join("\n");
+      const exportCsv = `${csvHeader}${csvRows}`;
+
+      this.batchClaimExports.set(batch.id, {
+        tenantId: tenant.id,
+        batchId: batch.id,
+        batchNumber: batch.batchNumber,
+        claimLinks,
+        exportCsv,
+        createdAt: Date.now(),
+      });
+
+      // 6. Update Batch Status to GENERATED with Merkle Root
       await BatchRepository.updateBatchStatus(tenant.id, batch.id, "GENERATED", {
         merkleRoot,
       });
 
-      // 6. Record Audit Log
+      // 7. Record Audit Log (Tokens are strictly excluded from audit logs)
       await this.tenantRepo.recordAuditLog({
         tenantId: tenant.id,
         userId: session?.sub,
@@ -336,10 +465,12 @@ export class BatchProcessingService {
         totalProcessed: generatedCredentials.length,
         merkleRoot,
         credentials: generatedCredentials,
+        claimLinks,
         zipSize: zipArchiveBytes.length,
         processedAt: new Date().toISOString(),
       };
     } catch (err: any) {
+      this.clearBatchClaimExport(batch.id);
       await BatchRepository.updateBatchStatus(tenant.id, batch.id, "FAILED", {
         errorSummary: err.message || "Unknown error during batch processing",
       });

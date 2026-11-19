@@ -36,7 +36,10 @@ export interface CreateSnapshotInput {
 
 export class StatusSnapshotRepository {
   private static inMemorySnapshots = new Map<string, StoredStatusSnapshot>();
-  private static useMemory = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static useMemory =
+    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+      ? false
+      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
 
   /**
    * Resets the in-memory snapshot store for hermetic test suites.

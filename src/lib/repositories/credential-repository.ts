@@ -67,7 +67,10 @@ export class CredentialRepository {
   private static inMemoryPdfBuffers = new Map<string, Uint8Array>();
   private static inMemoryBatchZips = new Map<string, Uint8Array>();
   private static inMemoryMerkleProofs = new Map<string, MerkleInclusionProof>();
-  private static useMemory = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static useMemory =
+    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+      ? false
+      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
 
   /**
    * Resets all in-memory credential stores for hermetic testing.

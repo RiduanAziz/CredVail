@@ -282,7 +282,11 @@ export class TenantRepository {
   private useMemory: boolean;
 
   constructor(forceMemory: boolean = false) {
-    this.useMemory = forceMemory || !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+    this.useMemory =
+      forceMemory ||
+      (process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+        ? false
+        : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432"));
   }
 
   async createTenant(data: {

@@ -55,6 +55,7 @@ model User {
   emailVerifiedAt    DateTime?
   twoFactorSecret    String?
   memberships        TenantMembership[]
+  claimInvitations   ClaimInvitation[]
   auditLogs          AuditLog[]
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -80,6 +81,7 @@ model Tenant {
   batches            IssuanceBatch[]
   credentials        CredentialRecord[]
   statusSnapshots    StatusSnapshot[]
+  claimInvitations   ClaimInvitation[]
   auditLogs          AuditLog[]
   
   createdAt          DateTime           @default(now())
@@ -211,6 +213,7 @@ model CredentialRecord {
   tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   batch              IssuanceBatch      @relation(fields: [batchId], references: [id], onDelete: Cascade)
   recipient          Recipient          @relation(fields: [recipientId], references: [id])
+  claimInvitations   ClaimInvitation[]
 
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
@@ -266,4 +269,27 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@map("audit_logs")
+}
+
+model ClaimInvitation {
+  id                 String             @id @default(uuid())
+  tokenHash          String             @unique
+  credentialId       String
+  certificateNumber  String
+  recipientEmail     String
+  tenantId           String
+  expiresAt          DateTime
+  consumedAt         DateTime?
+  claimedByUserId    String?
+  claimedByHolderDid String?
+  createdAt          DateTime           @default(now())
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credential         CredentialRecord   @relation(fields: [credentialId], references: [credentialId], onDelete: Cascade)
+  claimedByUser      User?              @relation(fields: [claimedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tokenHash])
+  @@index([certificateNumber])
+  @@index([recipientEmail])
+  @@map("claim_invitations")
 }

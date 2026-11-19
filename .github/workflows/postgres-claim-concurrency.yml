@@ -1,0 +1,80 @@
+name: PostgreSQL Concurrency & Transaction Integrity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-concurrency-tests:
+    name: PostgreSQL Live Concurrency & Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: credvail_user
+          POSTGRES_PASSWORD: credvail_ci_password_2026
+          POSTGRES_DB: credvail_test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U credvail_user -d credvail_test_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: "postgresql://credvail_user:credvail_ci_password_2026@localhost:5432/credvail_test_db?schema=public"
+      REQUIRE_POSTGRES_INTEGRATION: "true"
+      NODE_ENV: test
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Synchronize PostgreSQL Schema
+        run: npx prisma db push --skip-generate
+
+      - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
+        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts --reporter=verbose
+
+      - name: Publish Test Execution Summary
+        if: always()
+        run: |
+          echo "## PostgreSQL Concurrency & Transaction Integrity CI Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PostgreSQL Engine**: \`postgres:16-alpine\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Enforcement Flag**: \`REQUIRE_POSTGRES_INTEGRATION=true\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Node.js Version**: 22" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Target**: \`test/integration/postgres-claim-concurrency.test.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Matrix & Adversarial Scenarios" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-01**: 5 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 4 fail" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-02**: 10 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 9 fail" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-03**: 2 authenticated users racing for 1 invitation -> exactly 1 succeeds, 1 fails" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-04**: Expired invitation consumption -> strictly rejected (fails closed)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-05**: Replay of consumed invitation -> strictly rejected (410 / anti-replay)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-06**: Downstream association failure -> full atomic rollback verified, zero audit logs committed, retry succeeds" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-07**: Successful claim -> atomic association with user, holder DID, and audit log" >> $GITHUB_STEP_SUMMARY

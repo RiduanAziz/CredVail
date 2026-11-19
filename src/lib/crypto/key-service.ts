@@ -195,11 +195,14 @@ export class KeyService {
 
   /**
    * Verifies an ECDSA P-256 signature against a public key PEM or JWK.
+   * Supports:
+   * 1. IEEE P1363 raw (r, s) signatures (64 bytes for P-256, Base64URL or Buffer) from Web Crypto.
+   * 2. ASN.1 DER-encoded signatures (Hex, Base64, or Buffer) from Node.js crypto / OpenSSL.
    */
   static verifySignature(
     publicKeyPemOrJwk: string | EcdsaPublicKeyJwk,
     data: string | Buffer,
-    signatureHex: string
+    signature: string | Buffer
   ): boolean {
     try {
       let keyInput: crypto.KeyObject;
@@ -212,10 +215,35 @@ export class KeyService {
         });
       }
 
-      const verifier = crypto.createVerify("SHA256");
-      verifier.update(data);
-      verifier.end();
-      return verifier.verify(keyInput, signatureHex, "hex");
+      let sigBuffer: Buffer;
+      if (Buffer.isBuffer(signature)) {
+        sigBuffer = signature;
+      } else if (typeof signature === "string") {
+        const trimmed = signature.trim();
+        // Check for Hex representation: even length, hex characters, and typical signature length
+        if (
+          /^[0-9a-fA-F]+$/.test(trimmed) &&
+          trimmed.length % 2 === 0 &&
+          (trimmed.length === 128 || (trimmed.length >= 136 && trimmed.startsWith("30")))
+        ) {
+          sigBuffer = Buffer.from(trimmed, "hex");
+        } else {
+          // Standard JWS Base64URL / Base64 format from Web Crypto
+          sigBuffer = Buffer.from(trimmed, "base64url");
+        }
+      } else {
+        return false;
+      }
+
+      const dataBuffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      const dsaEncoding = sigBuffer.length === 64 ? "ieee-p1363" : "der";
+
+      return crypto.verify(
+        "SHA256",
+        dataBuffer,
+        { key: keyInput, dsaEncoding },
+        sigBuffer
+      );
     } catch {
       return false;
     }
@@ -292,6 +320,9 @@ export class KeyService {
 
   /**
    * Recovers an ECDSA NIST P-256 public key in SPKI PEM format from a Multibase Base58-BTC string.
+   * Supports:
+   * 1. Standard W3C did:key NIST P-256 (multicodec 0x1200 / varint [0x80, 0x24] + 33-byte compressed SEC1 point).
+   * 2. Legacy internal format ([0x12, 0x00] + 91-byte SPKI DER).
    */
   static multibaseToPublicKeyPem(multibase: string): string {
     if (!multibase.startsWith("z")) {
@@ -299,15 +330,101 @@ export class KeyService {
     }
 
     const decodedBuffer = decodeBase58(multibase.slice(1));
-    // Strip 2-byte multicodec header [0x12, 0x00]
-    const publicKeyDer = decodedBuffer.subarray(2);
-    const keyObject = crypto.createPublicKey({
-      key: publicKeyDer,
-      format: "der",
-      type: "spki",
+    if (decodedBuffer.length < 4) {
+      throw new Error(`Malformed multibase key: buffer too short (${decodedBuffer.length} bytes).`);
+    }
+
+    // Standard W3C P-256: multicodec 0x1200 represented as varint [0x80, 0x24] + 33-byte compressed SEC1
+    if (decodedBuffer[0] === 0x80 && decodedBuffer[1] === 0x24) {
+      if (decodedBuffer.length !== 35) {
+        throw new Error(
+          `Malformed P-256 did:key: expected exactly 35 bytes for multicodec and compressed point, got ${decodedBuffer.length}`
+        );
+      }
+      const compressedPoint = decodedBuffer.subarray(2);
+      return this.compressedP256ToPublicKeyPem(compressedPoint);
+    }
+
+    // Legacy fallback: [0x12, 0x00] + SPKI DER
+    if (decodedBuffer[0] === 0x12 && decodedBuffer[1] === 0x00) {
+      const publicKeyDer = decodedBuffer.subarray(2);
+      const keyObject = crypto.createPublicKey({
+        key: publicKeyDer,
+        format: "der",
+        type: "spki",
+      });
+      return keyObject.export({ type: "spki", format: "pem" }) as string;
+    }
+
+    throw new Error(
+      `Unsupported or invalid multicodec prefix: [0x${decodedBuffer[0].toString(16)}, 0x${decodedBuffer[1].toString(16)}]. Expected 0x1200 (0x80, 0x24).`
+    );
+  }
+
+  /**
+   * Decompresses a 33-byte compressed NIST P-256 (secp256r1) elliptic curve point,
+   * validates that it lies on the curve (y^2 = x^3 - 3x + b mod p), and exports SPKI PEM.
+   */
+  static compressedP256ToPublicKeyPem(compressed: Buffer): string {
+    if (!compressed || compressed.length !== 33) {
+      throw new Error(`Compressed P-256 point must be exactly 33 bytes, got ${compressed?.length || 0}`);
+    }
+    const prefix = compressed[0];
+    if (prefix !== 0x02 && prefix !== 0x03) {
+      throw new Error(`Invalid compressed point prefix: 0x${prefix.toString(16)}. Must be 0x02 or 0x03.`);
+    }
+
+    const p = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
+    const a = p - 3n;
+    const b = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
+
+    const x = BigInt("0x" + compressed.subarray(1).toString("hex"));
+    if (x >= p) {
+      throw new Error("X coordinate is not within the P-256 field (x >= p).");
+    }
+
+    // z = (x^3 + ax + b) mod p
+    const z = (((x * x + a) % p * x) % p + b) % p;
+    const modZ = (z % p + p) % p;
+
+    // y = z^((p+1)/4) mod p
+    let y = this.modPow(modZ, (p + 1n) / 4n, p);
+    const ySq = (y * y) % p;
+    if (ySq !== modZ) {
+      throw new Error("Supplied compressed coordinates do not represent a valid point on the NIST P-256 curve.");
+    }
+
+    if ((y & 1n) !== (BigInt(prefix) & 1n)) {
+      y = p - y;
+    }
+
+    const xHex = x.toString(16).padStart(64, "0");
+    const yHex = y.toString(16).padStart(64, "0");
+
+    const jwk: EcdsaPublicKeyJwk = {
+      kty: "EC",
+      crv: "P-256",
+      x: Buffer.from(xHex, "hex").toString("base64url"),
+      y: Buffer.from(yHex, "hex").toString("base64url"),
+    };
+
+    const keyObj = crypto.createPublicKey({
+      key: jwk as any,
+      format: "jwk",
     });
 
-    return keyObject.export({ type: "spki", format: "pem" }) as string;
+    return keyObj.export({ type: "spki", format: "pem" }) as string;
+  }
+
+  private static modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+    let res = 1n;
+    base = (base % mod + mod) % mod;
+    while (exp > 0n) {
+      if (exp % 2n === 1n) res = (res * base) % mod;
+      base = (base * base) % mod;
+      exp = exp / 2n;
+    }
+    return res;
   }
 
   /**

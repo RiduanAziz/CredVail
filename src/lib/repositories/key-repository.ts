@@ -37,7 +37,10 @@ export interface StoredIssuerKey {
 
 export class KeyRepository {
   private static inMemoryKeys = new Map<string, StoredIssuerKey>();
-  private static useMemory = !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static useMemory =
+    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+      ? false
+      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
 
   /**
    * Resets the in-memory key store for hermetic test suites.
