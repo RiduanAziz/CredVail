@@ -57,7 +57,14 @@ jobs:
         run: npx prisma db push --skip-generate
 
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
-        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts test/integration/postgres-h13-resilience.test.ts test/integration/postgres-claim-rate-limiter.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
+        run: |
+          npx vitest run \
+            test/integration/postgres-claim-concurrency.test.ts \
+            test/integration/postgres-h13-resilience.test.ts \
+            test/integration/postgres-claim-rate-limiter.test.ts \
+            --reporter=verbose \
+            --reporter=json \
+            --outputFile=vitest-report.json
 
       - name: Publish Test Execution Summary
         if: always()
@@ -71,10 +78,10 @@ jobs:
           echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`, \`test/integration/postgres-claim-rate-limiter.test.ts\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f vitest-report.json ]; then
-            PASSED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests || 0);")
-            FAILED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numFailedTests || 0);")
-            SKIPPED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPendingTests || 0);")
-            TOTAL=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numTotalTests || 0);")
+            PASSED=$(node -e "try { const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests ?? -1); } catch { console.log(-1); }")
+            FAILED=$(node -e "try { const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numFailedTests ?? -1); } catch { console.log(-1); }")
+            SKIPPED=$(node -e "try { const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPendingTests ?? -1); } catch { console.log(-1); }")
+            TOTAL=$(node -e "try { const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numTotalTests ?? -1); } catch { console.log(-1); }")
             echo "### Dynamic Test Execution Metrics" >> $GITHUB_STEP_SUMMARY
             echo "- **Total Tests**: $TOTAL" >> $GITHUB_STEP_SUMMARY
             echo "- **Passed**: $PASSED" >> $GITHUB_STEP_SUMMARY

@@ -182,39 +182,32 @@ export class PrismaClaimRateLimitRepository implements IClaimRateLimitRepository
       const safeBatchSize = Math.min(Math.max(1, Math.floor(batchSize)), 1000);
       const safeOlderThanMs = Math.max(0, Math.floor(olderThanMs));
 
-      // Obtain authoritative cutoff using PostgreSQL server clock_timestamp()
-      const timeRows = await this.client.$queryRaw<{ cutoff: Date }[]>`
-        SELECT (clock_timestamp() - (${safeOlderThanMs} * INTERVAL '1 millisecond')) AS cutoff
+      // Atomic, bounded cleanup statement using a single CTE query:
+      // 1. Evaluates cutoff timestamp once from PostgreSQL server clock_timestamp().
+      // 2. Selects stale candidates in deterministic order (resetAt ASC, keyHash ASC).
+      // 3. Employs FOR UPDATE SKIP LOCKED to immediately bypass any bucket actively being
+      //    refreshed or locked by a concurrent claim request (zero lock contention/delay).
+      // 4. Deletes only the locked candidate rows that remain older than the cutoff,
+      //    strictly preventing TOCTOU races where a refreshed bucket is deleted.
+      const deletedRows = await this.client.$queryRaw<{ keyHash: string }[]>`
+        WITH cutoff_time AS (
+          SELECT (clock_timestamp() - (${safeOlderThanMs} * INTERVAL '1 millisecond'))::timestamptz AS cutoff
+        ),
+        candidates AS (
+          SELECT "keyHash"
+          FROM "claim_rate_limit_buckets", cutoff_time
+          WHERE "resetAt" < cutoff_time.cutoff
+          ORDER BY "resetAt" ASC, "keyHash" ASC
+          LIMIT ${safeBatchSize}
+          FOR UPDATE SKIP LOCKED
+        )
+        DELETE FROM "claim_rate_limit_buckets"
+        WHERE "keyHash" IN (SELECT "keyHash" FROM candidates)
+          AND "resetAt" < (SELECT cutoff FROM cutoff_time)
+        RETURNING "keyHash"
       `;
 
-      if (!timeRows || timeRows.length === 0) {
-        return 0;
-      }
-
-      const dbCutoff = new Date(timeRows[0].cutoff);
-
-      // Deterministic ordering by resetAt ASC with bounded batch size
-      const staleRows = await this.client.claimRateLimitBucket.findMany({
-        where: {
-          resetAt: { lt: dbCutoff },
-        },
-        select: { keyHash: true },
-        orderBy: { resetAt: "asc" },
-        take: safeBatchSize,
-      });
-
-      if (staleRows.length === 0) {
-        return 0;
-      }
-
-      const keysToDelete = staleRows.map((r) => r.keyHash);
-      const deleteResult = await this.client.claimRateLimitBucket.deleteMany({
-        where: {
-          keyHash: { in: keysToDelete },
-        },
-      });
-
-      return deleteResult.count;
+      return deletedRows ? deletedRows.length : 0;
     } catch {
       // Storage maintenance failure must never affect live rate-limit enforcement
       return 0;
@@ -291,9 +284,9 @@ export class InMemoryClaimRateLimitRepository implements IClaimRateLimitReposito
     const cutoff = new Date(now.getTime() - safeOlderThanMs);
     let deletedCount = 0;
 
-    // Deterministic ordering by resetAt ASC
+    // Deterministic ordering by resetAt ASC, keyHash ASC
     const sortedEntries = Array.from(this.store.entries()).sort(
-      ([, a], [, b]) => a.resetAt.getTime() - b.resetAt.getTime()
+      ([keyA, a], [keyB, b]) => a.resetAt.getTime() - b.resetAt.getTime() || keyA.localeCompare(keyB)
     );
 
     for (const [key, bucket] of sortedEntries) {

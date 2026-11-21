@@ -12,7 +12,7 @@
  * - PGRL-05: Twenty simultaneous attempts through independent repository clients produce exactly 10 allowed and 10 rejected
  * - PGRL-06: Two independent clients share one persisted bucket (process-local state not required)
  * - PGRL-07: Persisted bucket keys contain only derived hash, not raw user identifier
- * - PGRL-08: Bounded cleanup removes stale buckets (>24h expired) but preserves active buckets
+ * - PGRL-08: Bounded cleanup removes stale buckets (>24h expired) but preserves active and concurrently-refreshed buckets
  * - PGRL-09: Claim API route returns HTTP 429 and correct Retry-After header when rate limit exceeded
  * - PGRL-10: Claim API route returns HTTP 503 with typed CLAIM_RATE_LIMIT_UNAVAILABLE when database fails
  * - PGRL-11: Forwarded-IP header spoofing cannot change or bypass the authenticated user's bucket
@@ -295,37 +295,107 @@ describe("CREDVAIL PostgreSQL Live Rate Limiting & Abuse Protection (H1.3.2)", (
     expect((row as any).identifier).toBeUndefined();
   });
 
-  testIfPostgres("PGRL-08: Bounded cleanup removes stale buckets (>24h expired) but preserves active buckets", async () => {
+  testIfPostgres("PGRL-08: Bounded cleanup removes stale buckets (>24h expired) but preserves active and concurrently-refreshed buckets", async () => {
     const activeUserId = `user:pgrl-08-active-${crypto.randomUUID()}`;
     const staleUserId = `user:pgrl-08-stale-${crypto.randomUUID()}`;
+    const concurrentUserId = `user:pgrl-08-concurrent-${crypto.randomUUID()}`;
 
     const activeHash = hashRateLimitKey(activeUserId);
     const staleHash = hashRateLimitKey(staleUserId);
-    createdKeyHashes.push(activeHash, staleHash);
+    const concurrentHash = hashRateLimitKey(concurrentUserId);
+    createdKeyHashes.push(activeHash, staleHash, concurrentHash);
 
+    const clientRefresh = new PrismaClient();
     const repo = new PrismaClaimRateLimitRepository();
 
-    // Active bucket
-    await repo.consumeAttempt(activeUserId);
-
-    // Stale bucket manually inserted with resetAt 25 hours in the past
-    const staleResetAt = new Date(Date.now() - 25 * 60 * 60 * 1000);
-    await prisma.claimRateLimitBucket.create({
-      data: {
-        keyHash: staleHash,
-        count: 10,
-        resetAt: staleResetAt,
-      },
+    let releaseRefreshLock: () => void = () => {};
+    const releaseRefreshPromise = new Promise<void>((resolve) => {
+      releaseRefreshLock = resolve;
     });
 
-    const deletedCount = await repo.cleanupStaleBuckets(500, 24 * 60 * 60 * 1000);
-    expect(deletedCount).toBeGreaterThanOrEqual(1);
+    let refreshTransaction: Promise<any> | null = null;
 
-    const staleRow = await prisma.claimRateLimitBucket.findUnique({ where: { keyHash: staleHash } });
-    const activeRow = await prisma.claimRateLimitBucket.findUnique({ where: { keyHash: activeHash } });
+    try {
+      // 1. Active bucket (active window)
+      await repo.consumeAttempt(activeUserId);
 
-    expect(staleRow).toBeNull();
-    expect(activeRow).not.toBeNull();
+      // 2. Unlocked stale bucket inserted with resetAt 25 hours in the past
+      await prisma.$executeRaw`
+        INSERT INTO "claim_rate_limit_buckets" ("keyHash", "count", "resetAt", "createdAt", "updatedAt")
+        VALUES (${staleHash}, 10, clock_timestamp() - INTERVAL '25 hours', clock_timestamp(), clock_timestamp())
+      `;
+
+      // 3. Stale bucket that will be concurrently refreshed by a live claim transaction
+      await prisma.$executeRaw`
+        INSERT INTO "claim_rate_limit_buckets" ("keyHash", "count", "resetAt", "createdAt", "updatedAt")
+        VALUES (${concurrentHash}, 10, clock_timestamp() - INTERVAL '25 hours', clock_timestamp(), clock_timestamp())
+      `;
+
+      // Synchronization for concurrent refresh transaction
+      let notifyLockAcquired: () => void = () => {};
+      const lockAcquiredPromise = new Promise<void>((resolve) => {
+        notifyLockAcquired = resolve;
+      });
+
+      // Claim transaction acquires row lock on concurrentHash and refreshes resetAt to active
+      refreshTransaction = clientRefresh.$transaction(
+        async (tx) => {
+          // Acquire exclusive row lock
+          await tx.$queryRaw`
+            SELECT "count", "resetAt"
+            FROM "claim_rate_limit_buckets"
+            WHERE "keyHash" = ${concurrentHash}
+            FOR UPDATE
+          `;
+          notifyLockAcquired();
+
+          // Refresh resetAt to active window
+          await tx.$executeRaw`
+            UPDATE "claim_rate_limit_buckets"
+            SET "count" = 1,
+                "resetAt" = clock_timestamp() + INTERVAL '60 seconds',
+                "updatedAt" = clock_timestamp()
+            WHERE "keyHash" = ${concurrentHash}
+          `;
+
+          await releaseRefreshPromise;
+        },
+        { timeout: 15000 }
+      );
+
+      // Wait until the claim transaction has acquired the lock and refreshed the row
+      await lockAcquiredPromise;
+
+      // 4. Run cleanup while refresh transaction holds the lock.
+      // Because cleanup uses FOR UPDATE SKIP LOCKED and checks resetAt < cutoff,
+      // it skips concurrentHash without blocking, and deletes unlocked staleHash!
+      const deletedCount = await repo.cleanupStaleBuckets(500, 24 * 60 * 60 * 1000);
+      expect(deletedCount).toBe(1);
+
+      // 5. Release refresh transaction lock
+      releaseRefreshLock();
+      await refreshTransaction;
+
+      // 6. Verify outcomes:
+      // - Unlocked stale row was deleted
+      // - Active row was preserved
+      // - Concurrently-refreshed row was NOT deleted and remains active
+      const staleRow = await prisma.claimRateLimitBucket.findUnique({ where: { keyHash: staleHash } });
+      const activeRow = await prisma.claimRateLimitBucket.findUnique({ where: { keyHash: activeHash } });
+      const concurrentRow = await prisma.claimRateLimitBucket.findUnique({ where: { keyHash: concurrentHash } });
+
+      expect(staleRow).toBeNull();
+      expect(activeRow).not.toBeNull();
+      expect(concurrentRow).not.toBeNull();
+      expect(concurrentRow!.count).toBe(1);
+      expect(concurrentRow!.resetAt.getTime()).toBeGreaterThan(Date.now());
+    } finally {
+      releaseRefreshLock();
+      if (refreshTransaction) {
+        await refreshTransaction.catch(() => {});
+      }
+      await clientRefresh.$disconnect();
+    }
   });
 
   testIfPostgres("PGRL-09: Claim API route returns HTTP 429 and correct Retry-After header when rate limit exceeded", async () => {
@@ -494,30 +564,43 @@ describe("CREDVAIL PostgreSQL Live Rate Limiting & Abuse Protection (H1.3.2)", (
     const keyHash = hashRateLimitKey(userId);
     createdKeyHashes.push(keyHash);
 
-    // Two independent PrismaClient instances representing separate application servers
+    // Build unique PostgreSQL application_name for Client B to strictly attribute its wait event
+    const baseDbUrl =
+      process.env.DATABASE_URL ||
+      "postgresql://postgres:postgres@localhost:5432/credvail_test?schema=public";
+    const clientBAppName = `credvail_pgrl12_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const separator = baseDbUrl.includes("?") ? "&" : "?";
+    const clientBDbUrl = `${baseDbUrl}${separator}application_name=${clientBAppName}`;
+
     const clientA = new PrismaClient();
-    const clientB = new PrismaClient();
+    const clientB = new PrismaClient({
+      datasources: {
+        db: { url: clientBDbUrl },
+      },
+    });
+
+    let releaseLockA: () => void = () => {};
+    const releaseLockPromise = new Promise<void>((resolve) => {
+      releaseLockA = resolve;
+    });
+
+    let clientATransaction: Promise<any> | null = null;
+    let clientBPromise: Promise<any> | null = null;
 
     try {
-      // 1. Create a user's bucket with count = 10 and resetAt 800ms in the future using PostgreSQL clock_timestamp()
+      // 1. Create bucket with count = 10 and resetAt ~1000ms in the future using PostgreSQL clock_timestamp()
       await prisma.$executeRaw`
         INSERT INTO "claim_rate_limit_buckets" ("keyHash", "count", "resetAt", "createdAt", "updatedAt")
-        VALUES (${keyHash}, 10, clock_timestamp() + INTERVAL '800 milliseconds', clock_timestamp(), clock_timestamp())
+        VALUES (${keyHash}, 10, clock_timestamp() + INTERVAL '1000 milliseconds', clock_timestamp(), clock_timestamp())
       `;
 
-      // Synchronization primitives to hold and release Client A's lock
       let notifyLockAcquired: () => void = () => {};
       const lockAcquiredPromise = new Promise<void>((resolve) => {
         notifyLockAcquired = resolve;
       });
 
-      let releaseLockA: () => void = () => {};
-      const releaseLockPromise = new Promise<void>((resolve) => {
-        releaseLockA = resolve;
-      });
-
-      // 2. Client A starts a transaction and locks the bucket row
-      const clientATransaction = clientA.$transaction(
+      // 2. Client A acquires SELECT ... FOR UPDATE
+      clientATransaction = clientA.$transaction(
         async (tx) => {
           await tx.$queryRaw`
             SELECT "count", "resetAt"
@@ -528,40 +611,128 @@ describe("CREDVAIL PostgreSQL Live Rate Limiting & Abuse Protection (H1.3.2)", (
           notifyLockAcquired();
           await releaseLockPromise;
         },
-        { timeout: 15000 }
+        { timeout: 20000 }
       );
 
-      // Wait until Client A has acquired the exclusive row lock
+      // Await confirmation that Client A has acquired the exclusive row lock
       await lockAcquiredPromise;
 
-      // 3. Client B starts consumeAttempt() while window is still active (<800ms)
-      // Client B's transaction begins and then blocks on SELECT ... FOR UPDATE
+      // Confirm that the original window is still active in PostgreSQL server time before Client B starts
+      const activeWindowCheck = await prisma.$queryRaw<{ is_active: boolean }[]>`
+        SELECT (clock_timestamp() < "resetAt") as is_active
+        FROM "claim_rate_limit_buckets"
+        WHERE "keyHash" = ${keyHash}
+      `;
+      expect(
+        activeWindowCheck[0]?.is_active,
+        "Original rate-limit window must still be active when Client B dispatches consumeAttempt"
+      ).toBe(true);
+
+      // 3. Start Client B's production consumeAttempt() via independent PrismaClient
       const repoB = new PrismaClaimRateLimitRepository(clientB);
-      const clientBPromise = repoB.consumeAttempt(userId);
+      clientBPromise = repoB.consumeAttempt(userId);
 
-      // 4. Hold Client A's lock until bucket's resetAt has passed (wait 1200ms)
-      await new Promise((resolve) => setTimeout(resolve, 1200));
+      // 4 & 5. Observe pg_stat_activity using third client (prisma) to confirm Client B is blocked on lock
+      interface StatActivityRow {
+        pid: number;
+        application_name: string;
+        state: string;
+        wait_event_type: string | null;
+        wait_event: string | null;
+        query: string;
+      }
 
-      // 5. Release Client A's lock so its transaction commits
+      let lockWaitObserved = false;
+      const pollStartTime = Date.now();
+      const pollTimeoutMs = 3000;
+
+      while (Date.now() - pollStartTime < pollTimeoutMs) {
+        const waitingRows = await prisma.$queryRaw<StatActivityRow[]>`
+          SELECT pid, application_name, state, wait_event_type, wait_event, query
+          FROM pg_stat_activity
+          WHERE application_name = ${clientBAppName}
+            AND state = 'active'
+            AND wait_event_type = 'Lock'
+            AND query LIKE '%claim_rate_limit_buckets%'
+            AND query LIKE '%FOR UPDATE%'
+        `;
+
+        if (waitingRows.length > 0) {
+          lockWaitObserved = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+
+      // 6. Enforce that Client B was actively observed waiting on the lock before the boundary
+      expect(
+        lockWaitObserved,
+        `Client B with application_name '${clientBAppName}' must be actively blocked on PostgreSQL row lock (wait_event_type = 'Lock')`
+      ).toBe(true);
+
+      // 7. Verify the original resetAt boundary has actually passed in PostgreSQL time before releasing Client A
+      let resetBoundaryPassed = false;
+      const boundaryPollStart = Date.now();
+      while (Date.now() - boundaryPollStart < 5000) {
+        const checkRows = await prisma.$queryRaw<{ is_expired: boolean }[]>`
+          SELECT (clock_timestamp() >= "resetAt") as is_expired
+          FROM "claim_rate_limit_buckets"
+          WHERE "keyHash" = ${keyHash}
+        `;
+        if (checkRows[0]?.is_expired) {
+          resetBoundaryPassed = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+
+      expect(
+        resetBoundaryPassed,
+        "PostgreSQL wall-clock time must have passed bucket resetAt before Client A releases lock"
+      ).toBe(true);
+
+      // 8. Release Client A's lock
       releaseLockA();
       await clientATransaction;
 
-      // 6. Allow Client B to acquire the lock and complete its decision
+      // 9. Allow Client B to acquire lock and complete decision
       const resultB = await clientBPromise;
 
-      // Expected Result:
-      // Client B sees window expired using clock_timestamp() captured after acquiring the row lock.
-      // Request is allowed, count resets to 1, and a new 60s window begins.
+      // Assertions using database time:
+      // Client B captured post-lock clock_timestamp(), correctly observed window expiry,
+      // allowed the claim attempt, and reset count = 1.
       expect(resultB.allowed).toBe(true);
       expect(resultB.retryAfter).toBeUndefined();
+
+      // Query PostgreSQL clock_timestamp() post-completion
+      const dbNowRows = await prisma.$queryRaw<{ now: Date }[]>`
+        SELECT clock_timestamp() as now
+      `;
+      const postDbNowMs = new Date(dbNowRows[0].now).getTime();
 
       const finalRow = await prisma.claimRateLimitBucket.findUnique({
         where: { keyHash },
       });
       expect(finalRow).not.toBeNull();
       expect(finalRow!.count).toBe(1);
-      expect(finalRow!.resetAt.getTime()).toBeGreaterThan(Date.now() + 45000);
+
+      // Phase 2: Assert new expiry is in the expected 60-second interval based on database time
+      const resetAtMs = finalRow!.resetAt.getTime();
+      const diffSeconds = (resetAtMs - postDbNowMs) / 1000;
+      expect(diffSeconds).toBeGreaterThanOrEqual(55);
+      expect(diffSeconds).toBeLessThanOrEqual(61);
     } finally {
+      // Guaranteed release of Client A's lock on any error or timeout
+      releaseLockA();
+
+      // Await transactions to settle to prevent connection or lock leakage
+      if (clientATransaction) {
+        await clientATransaction.catch(() => {});
+      }
+      if (clientBPromise) {
+        await clientBPromise.catch(() => {});
+      }
+
       await Promise.all([clientA.$disconnect(), clientB.$disconnect()]);
     }
   });
