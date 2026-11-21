@@ -56,7 +56,12 @@ test("3. Legacy selective-disclosure verification can never report success", asy
 
 test("4. Presentation verification requires a challenge and holder proof", async () => {
   const { VerificationService } = await import("../src/lib/services/verification-service.ts");
-  const challenge = VerificationService.createChallengeNonce(300, "https://verifier.example.test");
+  const { ChallengeNonceRepository, InMemoryChallengeNonceRepository } = await import(
+    "../src/lib/repositories/challenge-nonce-repository.ts"
+  );
+  ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
+
+  const challenge = await VerificationService.createChallengeNonce(300, "https://verifier.example.test");
   const result = await VerificationService.verifyPresentation({
     type: ["VerifiablePresentation"],
     verifiableCredential: [],
@@ -76,10 +81,15 @@ test("4. Presentation verification requires a challenge and holder proof", async
 
 test("5. Challenge nonces are one-use and audience-bound", async () => {
   const { VerificationService } = await import("../src/lib/services/verification-service.ts");
+  const { ChallengeNonceRepository, InMemoryChallengeNonceRepository } = await import(
+    "../src/lib/repositories/challenge-nonce-repository.ts"
+  );
+  ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
+
   const audience = "https://verifier.example.test";
-  const challenge = VerificationService.createChallengeNonce(300, audience);
+  const challenge = await VerificationService.createChallengeNonce(300, audience);
 
   assert.equal(challenge.audience, audience);
-  assert.equal(VerificationService.consumeChallengeNonce(challenge.nonce), true);
-  assert.equal(VerificationService.consumeChallengeNonce(challenge.nonce), false);
+  assert.equal(await VerificationService.consumeChallengeNonce(challenge.nonce), true);
+  assert.equal(await VerificationService.consumeChallengeNonce(challenge.nonce), false);
 });

@@ -25,6 +25,10 @@ import { TemplateRepository } from '../src/lib/repositories/template-repository.
 import { TenantRepository, inMemoryTenantStore } from '../src/lib/repositories/tenant-repository.ts';
 import { BlockchainService } from '../src/lib/blockchain/blockchain-service.ts';
 import { sanitizeFormulaValue } from '../src/lib/csv/spreadsheet-parser.ts';
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from '../src/lib/repositories/challenge-nonce-repository.ts';
 
 const ROOT_DIR = path.resolve('.');
 const RESULTS_DIR = path.join(ROOT_DIR, 'benchmarks', 'results');
@@ -56,6 +60,7 @@ test('2. Adversarial Attack Rejection Matrix (SEC-01 to SEC-10 / Metric M7)', as
   StatusSnapshotRepository.resetInMemoryStore();
   StatusListService.clearCache();
   inMemoryTenantStore.clear();
+  ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
 
   const tenantRepo = new TenantRepository();
   const tenant = await tenantRepo.createTenant({
@@ -150,13 +155,13 @@ test('2. Adversarial Attack Rejection Matrix (SEC-01 to SEC-10 / Metric M7)', as
   assert.equal(c3.outcome, 'REVOKED', 'SEC-03: Revoked credential must evaluate to REVOKED');
 
   // SEC-04: Nonce replay
-  const nonce = VerificationService.generateChallengeNonce(300);
-  assert.equal(VerificationService.consumeChallengeNonce(nonce), true);
-  assert.equal(VerificationService.consumeChallengeNonce(nonce), false, 'SEC-04: Replayed nonce must be rejected');
+  const nonce = await VerificationService.generateChallengeNonce(300);
+  assert.equal(await VerificationService.consumeChallengeNonce(nonce), true);
+  assert.equal(await VerificationService.consumeChallengeNonce(nonce), false, 'SEC-04: Replayed nonce must be rejected');
 
   // SEC-05: Audience mismatch / forged nonce
   assert.equal(
-    VerificationService.consumeChallengeNonce('cn_forged_audience'),
+    await VerificationService.consumeChallengeNonce('cn_forged_audience'),
     false,
     'SEC-05: Mismatched / forged nonce must be rejected'
   );
@@ -349,6 +354,7 @@ test('9. Empirical Metric M6: Instant Revocation Detection Latency (< 1.0s)', as
   StatusSnapshotRepository.resetInMemoryStore();
   StatusListService.clearCache();
   inMemoryTenantStore.clear();
+  ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
 
   const tenantRepo = new TenantRepository();
   const tenant = await tenantRepo.createTenant({

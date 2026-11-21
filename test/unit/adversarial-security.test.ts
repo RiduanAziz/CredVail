@@ -12,6 +12,10 @@ import { KeyService } from "@/lib/crypto/key-service";
 import { VcService } from "@/lib/crypto/vc-service";
 import { CredvailMerkleTree } from "@/lib/crypto/merkle";
 import { VerificationService } from "@/lib/services/verification-service";
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from "@/lib/repositories/challenge-nonce-repository";
 import { sanitizeFormulaValue } from "@/lib/csv/spreadsheet-parser";
 import { RevocationFreshnessService } from "@/lib/services/revocation-freshness-service";
 import { StatusListService } from "@/lib/services/status-list-service";
@@ -38,6 +42,7 @@ describe("Adversarial Security & Attack Rejection Matrix (SEC-01 to SEC-10 / Met
     StatusSnapshotRepository.resetInMemoryStore();
     StatusListService.clearCache();
     BlockchainService.resetSimulatedState();
+    ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
     CredentialRepository.resetInMemoryStore();
     inMemoryTenantStore.clear();
 
@@ -184,23 +189,23 @@ describe("Adversarial Security & Attack Rejection Matrix (SEC-01 to SEC-10 / Met
   });
 
   // SEC-04: Nonce Replay Attack
-  it("SEC-04: should reject presentation when replaying a previously consumed challenge nonce", () => {
-    const nonce = VerificationService.generateChallengeNonce(300);
+  it("SEC-04: should reject presentation when replaying a previously consumed challenge nonce", async () => {
+    const nonce = await VerificationService.generateChallengeNonce(300);
 
     // First consumption: verified nonce
-    const firstCheck = VerificationService.consumeChallengeNonce(nonce);
+    const firstCheck = await VerificationService.consumeChallengeNonce(nonce);
     expect(firstCheck).toBe(true);
 
     // Attack: Attacker captures payload and attempts to replay the same nonce
-    const replayCheck = VerificationService.consumeChallengeNonce(nonce);
+    const replayCheck = await VerificationService.consumeChallengeNonce(nonce);
     expect(replayCheck).toBe(false);
   });
 
   // SEC-05: Audience Domain Spoofing Mismatch
-  it("SEC-05: should reject presentation when challenge audience domain does not match", () => {
+  it("SEC-05: should reject presentation when challenge audience domain does not match", async () => {
     // Verifier checks audience against nonce
     const wrongNonce = "cn_forged_audience_nonce_value";
-    expect(VerificationService.consumeChallengeNonce(wrongNonce)).toBe(false);
+    expect(await VerificationService.consumeChallengeNonce(wrongNonce)).toBe(false);
   });
 
   // SEC-06: Cross-Tenant Horizontal Privilege Escalation

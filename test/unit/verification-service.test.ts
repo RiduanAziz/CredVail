@@ -5,6 +5,10 @@ import { CredentialRepository } from "@/lib/repositories/credential-repository";
 import { TenantRepository } from "@/lib/repositories/tenant-repository";
 import { BatchRepository } from "@/lib/repositories/batch-repository";
 import { KeyRepository } from "@/lib/repositories/key-repository";
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from "@/lib/repositories/challenge-nonce-repository";
 import { KeyService } from "@/lib/crypto/key-service";
 import { VcService, W3CVerifiableCredential } from "@/lib/crypto/vc-service";
 import { BlockchainService } from "@/lib/blockchain/blockchain-service";
@@ -24,6 +28,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
     CredentialRepository.resetInMemoryStore();
     BlockchainService.resetSimulatedState();
     KeyRepository.resetInMemoryStore();
+    ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
 
     const tenantRepo = new TenantRepository();
     let tenant = await tenantRepo.findBySlug(tenantSlug);
@@ -302,7 +307,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
 
   it("9. verifies a holder-signed presentation only with its one-use challenge and audience", async () => {
     const audience = "https://verifier.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, audience);
     const vp = createSignedHolderPresentation(nonce, audience);
 
     const result = await VerificationService.verifyPresentation(vp, nonce);
@@ -315,7 +320,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
 
   it("10. rejects replay of a holder presentation challenge", async () => {
     const audience = "https://verifier.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, audience);
     const vp = createSignedHolderPresentation(nonce, audience);
 
     const firstResult = await VerificationService.verifyPresentation(vp, nonce);
@@ -329,7 +334,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
 
   it("11. rejects presentations when no challenge nonce is supplied", async () => {
     const audience = "https://verifier.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, audience);
     const vp = createSignedHolderPresentation(nonce, audience);
 
     const result = await VerificationService.verifyPresentation(vp);
@@ -343,7 +348,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
 
   it("12. rejects presentations that have a valid credential but no holder proof", async () => {
     const audience = "https://verifier.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, audience);
     const vp = {
       "@context": ["https://www.w3.org/ns/credentials/v2"],
       type: ["VerifiablePresentation"],
@@ -363,7 +368,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
   it("13. rejects a presentation signed for a different verifier audience", async () => {
     const expectedAudience = "https://verifier.example.test";
     const wrongAudience = "https://attacker.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, expectedAudience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, expectedAudience);
     const vp = createSignedHolderPresentation(nonce, wrongAudience);
 
     const rejected = await VerificationService.verifyPresentation(vp, nonce);
@@ -378,7 +383,7 @@ describe("Phase 10: Public Verification Engine & Trust Architecture", () => {
 
   it("14. rejects a tampered holder signature without consuming the challenge", async () => {
     const audience = "https://verifier.example.test";
-    const { nonce } = VerificationService.createChallengeNonce(300, audience);
+    const { nonce } = await VerificationService.createChallengeNonce(300, audience);
     const vp = createSignedHolderPresentation(nonce, audience);
     vp.proof.jws = `${vp.proof.jws.slice(0, -4)}0000`;
 

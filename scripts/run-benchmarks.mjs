@@ -25,6 +25,12 @@ import { BlockchainService } from '../src/lib/blockchain/blockchain-service.ts';
 import { sanitizeFormulaValue } from '../src/lib/csv/spreadsheet-parser.ts';
 import { CredentialRepository } from '../src/lib/repositories/credential-repository.ts';
 import { TenantRepository, inMemoryTenantStore } from '../src/lib/repositories/tenant-repository.ts';
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from '../src/lib/repositories/challenge-nonce-repository.ts';
+
+ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
 
 const RESULTS_DIR = path.resolve('benchmarks', 'results');
 if (!fs.existsSync(RESULTS_DIR)) {
@@ -192,7 +198,7 @@ async function runBenchmark() {
   // -------------------------------------------------------------
   console.log('\n[2/7] Running Metric M2 & Hypothesis H2: Selective Disclosure Payload...');
   await WalletService.claimCredential({ certificateNumber, recipientEmail }, 'bench_empirical_holder');
-  const nonce = VerificationService.generateChallengeNonce(300);
+  const nonce = await VerificationService.generateChallengeNonce(300);
 
   const presentationResult = WalletService.createSelectivePresentation(
     certificateNumber,
@@ -344,12 +350,12 @@ async function runBenchmark() {
 
   attackVectors[2].success = outcome.outcome === 'REVOKED';
 
-  const n = VerificationService.generateChallengeNonce(300);
-  VerificationService.consumeChallengeNonce(n);
-  const replay = VerificationService.consumeChallengeNonce(n);
+  const n = await VerificationService.generateChallengeNonce(300);
+  await VerificationService.consumeChallengeNonce(n);
+  const replay = await VerificationService.consumeChallengeNonce(n);
   attackVectors[3].success = !replay;
 
-  attackVectors[4].success = !VerificationService.consumeChallengeNonce('cn_forged_audience');
+  attackVectors[4].success = !(await VerificationService.consumeChallengeNonce('cn_forged_audience'));
 
   const sanitized = sanitizeFormulaValue("=cmd|'/C calc'!A0");
   attackVectors[6].success = sanitized.startsWith("'");

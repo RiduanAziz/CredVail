@@ -24,6 +24,10 @@ import { KeyRepository } from "@/lib/repositories/key-repository";
 import { ClaimInvitationRepository } from "@/lib/repositories/claim-invitation-repository";
 import { ClaimInvitationService } from "@/lib/services/claim-invitation-service";
 import { VerificationService } from "@/lib/services/verification-service";
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from "@/lib/repositories/challenge-nonce-repository";
 import { VcService } from "@/lib/crypto/vc-service";
 import { createSessionToken } from "@/lib/auth/session";
 import { GET as getCredentialsRoute } from "@/app/api/v1/wallet/credentials/route";
@@ -50,6 +54,7 @@ describe("CREDVAIL H1.1: Browser Custody & Cryptographic Interoperability", () =
     CredentialRepository.resetInMemoryStore();
     ClaimInvitationRepository.resetInMemoryStore();
     KeyRepository.resetInMemoryStore();
+    ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
     inMemoryTenantStore.clear();
 
     const tenantRepo = new TenantRepository();
@@ -283,7 +288,7 @@ describe("CREDVAIL H1.1: Browser Custody & Cryptographic Interoperability", () =
   });
 
   it("H11-10: rejects presentation when verificationMethod does not match holder DID", async () => {
-    const challenge = VerificationService.createChallengeNonce(300, "http://localhost:3000");
+    const challenge = await VerificationService.createChallengeNonce(300, "http://localhost:3000");
     const cred = await WalletService.claimCredential(
       { certificateNumber: certNumber, claimToken: validClaimToken, userEmail: aliceEmail, userEmailVerified: true },
       aliceUserId
@@ -340,7 +345,7 @@ describe("CREDVAIL H1.1: Browser Custody & Cryptographic Interoperability", () =
     );
 
     // 2. Obtain fresh challenge nonce
-    const challenge = VerificationService.createChallengeNonce(300, "http://localhost:3000");
+    const challenge = await VerificationService.createChallengeNonce(300, "http://localhost:3000");
 
     // 3. Browser signs presentation locally
     const vp = await BrowserWalletEngine.createAndSignPresentation({
@@ -385,7 +390,7 @@ describe("CREDVAIL H1.1: Browser Custody & Cryptographic Interoperability", () =
       aliceUserId
     );
 
-    const challenge = VerificationService.createChallengeNonce(300, "http://localhost:3000");
+    const challenge = await VerificationService.createChallengeNonce(300, "http://localhost:3000");
 
     const vp = await BrowserWalletEngine.createAndSignPresentation({
       credential: claimed,

@@ -241,14 +241,14 @@ model StatusSnapshot {
 }
 
 model ChallengeNonce {
-  id                 String             @id @default(uuid())
-  nonce              String             @unique
-  audience           String
-  expiresAt          DateTime
-  consumedAt         DateTime?
-  createdAt          DateTime           @default(now())
+  id         String    @id @default(uuid())
+  nonceHash  String    @unique
+  audience   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
 
-  @@index([nonce, expiresAt])
+  @@index([expiresAt])
   @@map("challenge_nonces")
 }
 

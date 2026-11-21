@@ -32,6 +32,7 @@ import { BatchRepository } from "../repositories/batch-repository.ts";
 import type { IssuanceBatchRecord } from "../repositories/batch-repository.ts";
 import { KeyRepository } from "../repositories/key-repository.ts";
 import type { StoredIssuerKey } from "../repositories/key-repository.ts";
+import { ChallengeNonceRepository } from "../repositories/challenge-nonce-repository.ts";
 
 export type VerificationStatus =
   | "VALID"
@@ -134,48 +135,38 @@ export interface VerificationResult {
 
 export interface ChallengeNonce {
   nonce: string;
-  issuedAt: number;
-  expiresAt: number;
+  expiresAt: string;
   audience: string;
 }
 
 export class VerificationService {
   private static tenantRepo = new TenantRepository();
-  private static challengeCache = new Map<string, ChallengeNonce>();
 
   /**
    * Generates a replay-resistant challenge nonce for interactive presentation verification.
-   * Challenge expires after 5 minutes (300,000 ms).
+   * Challenge expires after 5 minutes (300,000 ms) by default.
+   * Challenge is persisted exclusively in PostgreSQL (or injected test double).
    */
-  static createChallengeNonce(
+  static async createChallengeNonce(
     ttlSeconds: number = 300,
     audience: string = ""
-  ): { nonce: string; expiresAt: string; audience: string } {
+  ): Promise<{ nonce: string; expiresAt: string; audience: string }> {
     if (!Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 600) {
       throw new Error("Challenge TTL must be an integer between 1 and 600 seconds.");
     }
 
     const nonce = `cn_${crypto.randomBytes(24).toString("hex")}`;
-    const now = Date.now();
-    const expiresAt = now + ttlSeconds * 1000;
+    const expiresAtDate = new Date(Date.now() + ttlSeconds * 1000);
 
-    this.challengeCache.set(nonce, {
+    await ChallengeNonceRepository.createChallenge({
       nonce,
-      issuedAt: now,
-      expiresAt,
       audience,
+      expiresAt: expiresAtDate,
     });
-
-    // Housekeeping: remove expired nonces
-    for (const [key, val] of this.challengeCache.entries()) {
-      if (val.expiresAt < now) {
-        this.challengeCache.delete(key);
-      }
-    }
 
     return {
       nonce,
-      expiresAt: new Date(expiresAt).toISOString(),
+      expiresAt: expiresAtDate.toISOString(),
       audience,
     };
   }
@@ -184,21 +175,31 @@ export class VerificationService {
    * Convenience alias returning just the nonce string.
    * An audience is required when the challenge is used for VP verification.
    */
-  static generateChallengeNonce(ttlSeconds: number = 300, audience: string = ""): string {
-    return this.createChallengeNonce(ttlSeconds, audience).nonce;
+  static async generateChallengeNonce(
+    ttlSeconds: number = 300,
+    audience: string = ""
+  ): Promise<string> {
+    const challenge = await this.createChallengeNonce(ttlSeconds, audience);
+    return challenge.nonce;
   }
 
   /**
    * Validates and consumes a challenge nonce (prevents replay attacks).
    */
-  static consumeChallengeNonce(nonce: string): boolean {
-    if (!nonce || !this.challengeCache.has(nonce)) {
+  static async consumeChallengeNonce(nonce: string, audience?: string): Promise<boolean> {
+    if (!nonce || typeof nonce !== "string") {
       return false;
     }
-    const item = this.challengeCache.get(nonce)!;
-    this.challengeCache.delete(nonce); // One-time use
 
-    return Date.now() <= item.expiresAt;
+    const active = await ChallengeNonceRepository.findActiveChallenge(nonce);
+    if (!active) {
+      return false;
+    }
+
+    return ChallengeNonceRepository.consumeChallengeAtomic({
+      nonce,
+      expectedAudience: audience || active.audience,
+    });
   }
 
   /**
@@ -416,17 +417,17 @@ export class VerificationService {
       ? (vpPayload.proof as Record<string, unknown>)
       : null;
 
-    // Fail closed: presentation verification always requires a server-issued challenge.
-    const issuedChallenge = challengeNonce
-      ? this.challengeCache.get(challengeNonce)
-      : undefined;
+    // Fail closed: presentation verification always requires an active, unconsumed server-issued challenge.
+    const activeChallenge = challengeNonce && typeof challengeNonce === "string"
+      ? await ChallengeNonceRepository.findActiveChallenge(challengeNonce)
+      : null;
+
     const challengeMatches =
       !!challengeNonce &&
-      !!issuedChallenge &&
-      issuedChallenge.expiresAt >= Date.now() &&
-      !!issuedChallenge.audience &&
+      !!activeChallenge &&
+      !!activeChallenge.audience &&
       proof?.challenge === challengeNonce &&
-      proof?.domain === issuedChallenge.audience;
+      proof?.domain === activeChallenge.audience;
 
     // Holder proof is mandatory. An absent proof, unknown DID method, or
     // unresolvable key is a verification failure, never a default success.
@@ -459,12 +460,16 @@ export class VerificationService {
       }
     }
 
-    // Consume the challenge atomically within this process only after the
-    // holder proof and challenge/audience binding have both passed.
-    const nonceValid =
-      challengeMatches &&
-      holderSigValid &&
-      this.consumeChallengeNonce(challengeNonce as string);
+    // Consume the challenge atomically via the repository ONLY after both the
+    // holder signature and challenge/audience binding have fully passed.
+    // If holderSigValid is false, the challenge is NEVER consumed.
+    let nonceValid = false;
+    if (challengeMatches && holderSigValid && activeChallenge) {
+      nonceValid = await ChallengeNonceRepository.consumeChallengeAtomic({
+        nonce: challengeNonce as string,
+        expectedAudience: activeChallenge.audience,
+      });
+    }
 
     checks.push({
       code: "CHALLENGE_NONCE_VERIFICATION",

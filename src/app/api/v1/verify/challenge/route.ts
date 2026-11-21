@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const challenge = VerificationService.createChallengeNonce(300, parsedAudience.origin);
+    const challenge = await VerificationService.createChallengeNonce(300, parsedAudience.origin);
 
     return NextResponse.json(
       { success: true, data: challenge },
@@ -46,11 +46,11 @@ export async function POST(request: NextRequest) {
         },
       }
     );
-  } catch (error: any) {
+  } catch {
     return NextResponse.json(
       {
         error: "INTERNAL_SERVER_ERROR",
-        message: error.message || "Failed to generate challenge nonce.",
+        message: "Failed to generate challenge nonce.",
       },
       { status: 500 }
     );

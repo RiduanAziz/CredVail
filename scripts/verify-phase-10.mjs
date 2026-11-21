@@ -517,17 +517,21 @@ test("9. Ethereum Sepolia Blockchain Consensus & On-Chain Verification", async (
 
 test("10. Public REST API Endpoints & Replay-Resistant Challenge Nonce", async () => {
   const { VerificationService } = await import("../src/lib/services/verification-service.ts");
+  const { ChallengeNonceRepository, InMemoryChallengeNonceRepository } = await import(
+    "../src/lib/repositories/challenge-nonce-repository.ts"
+  );
+  ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
 
   // Create nonce
-  const { nonce, expiresAt } = VerificationService.createChallengeNonce();
+  const { nonce, expiresAt } = await VerificationService.createChallengeNonce();
   assert.ok(nonce.startsWith("cn_"));
   assert.ok(new Date(expiresAt).getTime() > Date.now());
 
   // Consume nonce
-  const validFirstUse = VerificationService.consumeChallengeNonce(nonce);
+  const validFirstUse = await VerificationService.consumeChallengeNonce(nonce);
   assert.equal(validFirstUse, true);
 
   // Replay attempt fails
-  const replayedUse = VerificationService.consumeChallengeNonce(nonce);
+  const replayedUse = await VerificationService.consumeChallengeNonce(nonce);
   assert.equal(replayedUse, false);
 });

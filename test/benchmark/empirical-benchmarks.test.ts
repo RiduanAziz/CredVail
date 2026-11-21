@@ -12,6 +12,10 @@ import { VcService } from "@/lib/crypto/vc-service";
 import { CredvailMerkleTree } from "@/lib/crypto/merkle";
 import { WalletService } from "@/lib/wallet/wallet-service";
 import { VerificationService } from "@/lib/services/verification-service";
+import {
+  ChallengeNonceRepository,
+  InMemoryChallengeNonceRepository,
+} from "@/lib/repositories/challenge-nonce-repository";
 import { RevocationFreshnessService } from "@/lib/services/revocation-freshness-service";
 import { StatusListService } from "@/lib/services/status-list-service";
 import { StatusSnapshotRepository } from "@/lib/repositories/status-snapshot-repository";
@@ -38,6 +42,7 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
     WalletService.resetInMemoryStore();
     StatusSnapshotRepository.resetInMemoryStore();
     StatusListService.clearCache();
+    ChallengeNonceRepository.setTestDouble(new InMemoryChallengeNonceRepository());
     inMemoryTenantStore.clear();
 
     const tenantRepo = new TenantRepository();
@@ -184,7 +189,7 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
     );
 
     // 2. Issue challenge nonce
-    const challenge = VerificationService.createChallengeNonce(300, "https://verifier.org");
+    const challenge = await VerificationService.createChallengeNonce(300, "https://verifier.org");
 
     // 3. Creation of non-standard selective presentation fails closed
     expect(() =>
@@ -321,13 +326,13 @@ describe("Empirical Thesis Benchmark Suite (Metrics M1-M7 & Hypotheses H1-H3)", 
     }
 
     // 3. Replay attack on nonce
-    const nonce = VerificationService.generateChallengeNonce(300);
-    VerificationService.consumeChallengeNonce(nonce);
-    const replayCheck = VerificationService.consumeChallengeNonce(nonce);
+    const nonce = await VerificationService.generateChallengeNonce(300);
+    await VerificationService.consumeChallengeNonce(nonce);
+    const replayCheck = await VerificationService.consumeChallengeNonce(nonce);
     if (!replayCheck) rejections++;
 
     // 4. Mismatched / forged nonce
-    const audCheck = VerificationService.consumeChallengeNonce("cn_forged_nonexistent");
+    const audCheck = await VerificationService.consumeChallengeNonce("cn_forged_nonexistent");
     if (!audCheck) rejections++;
 
     // 5. Revoked credential

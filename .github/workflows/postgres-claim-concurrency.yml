@@ -57,18 +57,18 @@ jobs:
         run: npx prisma db push --skip-generate
 
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
-        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
+        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts test/integration/postgres-h13-resilience.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
 
       - name: Publish Test Execution Summary
         if: always()
         run: |
-          echo "## PostgreSQL Concurrency & Transaction Integrity CI Report" >> $GITHUB_STEP_SUMMARY
+          echo "## PostgreSQL Concurrency & Challenge Resilience CI Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow Result**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **PostgreSQL Engine**: \`postgres:16-alpine\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Enforcement Flag**: \`REQUIRE_POSTGRES_INTEGRATION=true\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Node.js Version**: 22" >> $GITHUB_STEP_SUMMARY
-          echo "- **Test Target**: \`test/integration/postgres-claim-concurrency.test.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f vitest-report.json ]; then
             PASSED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests || 0);")
@@ -83,13 +83,24 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           echo "### Test Matrix & Adversarial Scenarios" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-01**: 5 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 4 fail with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-02**: 10 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 9 fail with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-03**: 2 authenticated users racing for 1 invitation -> exactly 1 succeeds, 1 fails with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-04**: Expired invitation consumption -> strictly rejected with typed CLAIM_EXPIRED (fails closed)" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-05**: Replay of consumed invitation -> strictly rejected with typed CLAIM_ALREADY_CONSUMED (HTTP 410 / anti-replay)" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-06**: Downstream association failure -> full atomic rollback verified, zero audit logs committed, retry succeeds" >> $GITHUB_STEP_SUMMARY
+          echo "#### Claim Concurrency & Integrity (PG-01 to PG-10)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-01 to PG-03**: Concurrent simultaneous claims -> exactly 1 succeeds, others fail with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-04**: Expired invitation consumption -> strictly rejected with typed CLAIM_EXPIRED" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-05**: Replay of consumed invitation -> strictly rejected with typed CLAIM_ALREADY_CONSUMED (HTTP 410)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-06**: Downstream association failure -> full atomic rollback verified, zero audit logs committed" >> $GITHUB_STEP_SUMMARY
           echo "- **PG-07**: Successful claim -> atomic association with recipient, user, holder DID, and audit log" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-08**: Mismatched token hash -> rejected with typed CLAIM_INVALID; invitation remains unconsumed" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-09**: Claim API route integration -> losing/replay redemption returns HTTP 410 GONE, never HTTP 500" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-08**: Mismatched token hash -> rejected with typed CLAIM_INVALID" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-09**: Claim API route integration -> losing redemption returns HTTP 410 GONE, never HTTP 500" >> $GITHUB_STEP_SUMMARY
           echo "- **PG-10**: Retry exhaustion -> bounded conflict exhaustion returns controlled HTTP 503 with Retry-After header" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Challenge Nonce Persistence & Replay Protection (H131-01 to H131-16)" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-01 / H131-02**: Raw nonce returned once; only SHA-256 nonceHash stored in PostgreSQL" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-03 / H131-04**: Survives process restart; multiple application instances read same challenge" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-05 / H131-06**: Validated against verifier audience; mismatched audience rejected without consuming" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-07 / H131-08**: Expired or unknown challenges strictly rejected" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-09 / H131-10**: Invalid holder signature leaves challenge unconsumed; valid signature consumes atomically" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-11**: Replay of consumed challenge strictly rejected" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-12 / H131-13**: Concurrent consumers -> exactly 1 succeeds, others fail atomically" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-14**: Cross-instance consumption rejection verified" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-15**: Fail-closed reachability verification enforced" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-16**: Bounded expired challenge cleanup removes expired rows while strictly preserving active challenges" >> $GITHUB_STEP_SUMMARY
