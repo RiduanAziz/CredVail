@@ -22,6 +22,7 @@ import {
   ClaimOwnershipError,
   ClaimEmailUnverifiedError,
   ClaimTransactionBusyError,
+  CredentialAlreadyClaimedError,
 } from "../repositories/claim-invitation-repository.ts";
 
 export {
@@ -32,6 +33,7 @@ export {
   ClaimOwnershipError,
   ClaimEmailUnverifiedError,
   ClaimTransactionBusyError,
+  CredentialAlreadyClaimedError,
 };
 
 export interface GenerateInvitationInput {

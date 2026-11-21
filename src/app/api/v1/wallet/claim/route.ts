@@ -160,6 +160,11 @@ export async function POST(request: NextRequest) {
     if (error instanceof ClaimError || (typeof error?.statusCode === "number" && typeof error?.code === "string")) {
       status = error.statusCode;
     } else if (
+      msg.includes("already been claimed") ||
+      msg.includes("CREDENTIAL_ALREADY_CLAIMED")
+    ) {
+      status = 409;
+    } else if (
       msg.includes("not found") ||
       msg.includes("Invalid or unverified") ||
       msg.includes("invalid")
@@ -178,6 +183,7 @@ export async function POST(request: NextRequest) {
     }
 
     const claimCode = error?.code || (
+      status === 409 ? "CREDENTIAL_ALREADY_CLAIMED" :
       status === 403 ? (msg.includes("not verified") ? "CLAIM_EMAIL_UNVERIFIED" : "CLAIM_OWNERSHIP_FAILED") :
       status === 410 ? (msg.includes("expired") ? "CLAIM_EXPIRED" : "CLAIM_ALREADY_CONSUMED") :
       status === 404 ? "CLAIM_INVALID" :
@@ -190,6 +196,7 @@ export async function POST(request: NextRequest) {
     if (status === 400) errorCategory = "BAD_REQUEST";
     else if (status === 403) errorCategory = "FORBIDDEN";
     else if (status === 404) errorCategory = "NOT_FOUND";
+    else if (status === 409) errorCategory = "CONFLICT";
     else if (status === 410) errorCategory = "GONE";
     else if (status === 503) errorCategory = "SERVICE_UNAVAILABLE";
 

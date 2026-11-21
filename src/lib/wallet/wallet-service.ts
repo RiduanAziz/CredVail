@@ -19,24 +19,21 @@ import type {
 } from "../crypto/selective-disclosure.ts";
 import { CredentialRepository } from "../repositories/credential-repository.ts";
 import { TenantRepository } from "../repositories/tenant-repository.ts";
-import { ClaimInvitationService } from "../services/claim-invitation-service.ts";
+import {
+  ClaimInvitationService,
+  CredentialAlreadyClaimedError,
+} from "../services/claim-invitation-service.ts";
+import {
+  WalletCredentialRepository,
+  PrismaWalletCredentialRepository,
+  InMemoryWalletCredentialRepository,
+  WalletStorageUnavailableError,
+  type StoredWalletCredential,
+} from "../repositories/wallet-credential-repository.ts";
 import type { W3CVerifiableCredential } from "../crypto/vc-service.ts";
 
-export interface StoredWalletCredential {
-  id: string;
-  credentialId: string;
-  certificateNumber: string;
-  recipientName: string;
-  recipientEmail: string;
-  courseName: string;
-  issuerName: string;
-  issuerDid: string;
-  claims: Record<string, string>;
-  disclosures: Record<string, ClaimDisclosure>;
-  rawVc: W3CVerifiableCredential;
-  claimedAt: string;
-  claimedByUserId?: string;
-}
+export type { StoredWalletCredential };
+export { WalletStorageUnavailableError, CredentialAlreadyClaimedError };
 
 export interface HolderIdentity {
   holderId: string;
@@ -99,6 +96,7 @@ export class WalletService {
    */
   static resetInMemoryStore(): void {
     this.inMemoryVaults.clear();
+    WalletCredentialRepository.resetInMemoryStore();
   }
 
   /**
@@ -197,11 +195,34 @@ export class WalletService {
     this.inMemoryVaults.get(holderId)!.set(storedItem.credentialId, storedItem);
     this.inMemoryVaults.get(holderId)!.set(storedItem.certificateNumber, storedItem);
 
+    if (WalletCredentialRepository.instance instanceof InMemoryWalletCredentialRepository) {
+      (WalletCredentialRepository.instance as InMemoryWalletCredentialRepository).addCredential(storedItem);
+    }
+
     return storedItem;
   }
 
   /**
-   * Lists all claimed credentials in a holder's wallet.
+   * Retrieves durable claimed credentials for an authenticated user from PostgreSQL.
+   * Scoped strictly to claimedByUserId matching the user and consumedAt IS NOT NULL.
+   */
+  static async listClaimedCredentials(userId: string): Promise<StoredWalletCredential[]> {
+    return WalletCredentialRepository.listClaimedCredentials(userId);
+  }
+
+  /**
+   * Authoritatively verifies whether the user owns a specific credential durable in PostgreSQL.
+   */
+  static async userOwnsCredential(
+    userId: string,
+    credentialId: string,
+    certificateNumber?: string
+  ): Promise<boolean> {
+    return WalletCredentialRepository.userOwnsCredential(userId, credentialId, certificateNumber);
+  }
+
+  /**
+   * Lists all claimed credentials in a holder's wallet (in-memory cache / legacy helper).
    */
   static listCredentials(holderId: string = "default_holder"): StoredWalletCredential[] {
     const vault = this.inMemoryVaults.get(holderId);

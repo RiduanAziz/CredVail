@@ -59,8 +59,45 @@ export class ClaimTransactionBusyError extends ClaimError {
   }
 }
 
+export class CredentialAlreadyClaimedError extends ClaimError {
+  constructor(message: string = "This credential has already been claimed by another user.") {
+    super(message, "CREDENTIAL_ALREADY_CLAIMED", 409);
+  }
+}
+
+function isSingleOwnerIndexViolation(err: any): boolean {
+  if (!err) return false;
+  if (typeof err.message === "string") {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("claim_invitations_one_consumed_owner_per_credential_uq")) return true;
+  }
+  if (err.code === "P2002") {
+    const target = err.meta?.target;
+    if (Array.isArray(target) && target.includes("credentialId")) return true;
+    if (
+      typeof target === "string" &&
+      (target.includes("credentialId") ||
+        target.includes("claim_invitations_one_consumed_owner_per_credential_uq"))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isAnyUniqueViolation(err: any): boolean {
+  if (!err) return false;
+  if (err.code === "P2002") return true;
+  if (typeof err.message === "string") {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("unique constraint") || msg.includes("23505")) return true;
+  }
+  return false;
+}
+
 function isRetryableTransactionConflict(err: any): boolean {
   if (!err) return false;
+  if (isAnyUniqueViolation(err)) return false; // Unique violations are deterministic and must fail fast with 409
   if (err.code === "P2034") return true;
   if (typeof err.message === "string") {
     const msg = err.message.toLowerCase();
@@ -258,6 +295,20 @@ export class ClaimInvitationRepository {
         throw new ClaimInvalidError(`Certificate mismatch: This claim token is not valid for certificate "${certificateNumber}".`);
       }
 
+      // Single-owner invariant: Check if another invitation for the same credential has already been consumed
+      for (const inv of this.inMemoryInvitations.values()) {
+        if (
+          inv.credentialId === targetInv.credentialId &&
+          inv.consumedAt !== null &&
+          inv.claimedByUserId !== null &&
+          inv.id !== targetInv.id
+        ) {
+          throw new CredentialAlreadyClaimedError(
+            "This credential has already been claimed by another user."
+          );
+        }
+      }
+
       // Snapshot prior to mutation for atomic transactional rollback
       const snapshot: StoredClaimInvitation = { ...targetInv };
       targetInv.consumedAt = consumedAt;
@@ -350,6 +401,22 @@ export class ClaimInvitationRepository {
               );
             }
 
+            // Single-owner invariant pre-check: ensure no other invitation for this credential is already consumed
+            const otherClaimed = await tx.claimInvitation.findFirst({
+              where: {
+                credentialId: credRecord.credentialId,
+                consumedAt: { not: null },
+                claimedByUserId: { not: null },
+                id: { not: invitationId },
+              },
+              select: { id: true, claimedByUserId: true },
+            });
+            if (otherClaimed) {
+              throw new CredentialAlreadyClaimedError(
+                "This credential has already been claimed by another user."
+              );
+            }
+
             // 3. Load updated invitation inside transaction
             const updated = await tx.claimInvitation.findUnique({
               where: { id: invitationId },
@@ -409,6 +476,47 @@ export class ClaimInvitationRepository {
           throw err;
         }
 
+        // Translate PostgreSQL partial unique index violation into typed domain error
+        if (isSingleOwnerIndexViolation(err)) {
+          throw new CredentialAlreadyClaimedError(
+            "This credential has already been claimed by another user."
+          );
+        }
+
+        // If generic unique violation occurred without explicit index metadata,
+        // perform a safe post-failure ownership recheck on credentialId
+        if (isAnyUniqueViolation(err)) {
+          try {
+            const target = await prisma.claimInvitation.findUnique({
+              where: { id: invitationId },
+              select: { credentialId: true },
+            });
+            const targetCredId = target?.credentialId;
+            if (targetCredId) {
+              const existingClaim = await prisma.claimInvitation.findFirst({
+                where: {
+                  credentialId: targetCredId,
+                  consumedAt: { not: null },
+                  claimedByUserId: { not: null },
+                },
+                select: { id: true, claimedByUserId: true },
+              });
+              if (existingClaim) {
+                throw new CredentialAlreadyClaimedError(
+                  "This credential has already been claimed by another user."
+                );
+              }
+            }
+          } catch (recheckErr) {
+            if (recheckErr instanceof CredentialAlreadyClaimedError) {
+              throw recheckErr;
+            }
+          }
+          // If no existing claim for credentialId exists, this is an unrelated unique violation (e.g. tokenHash).
+          // Do NOT translate to CredentialAlreadyClaimedError!
+          throw err;
+        }
+
         const isRetryable = isRetryableTransactionConflict(err);
         if (isRetryable && attempt < maxAttempts) {
           // Restart fresh whole transaction after small jittered backoff
@@ -435,9 +543,8 @@ export class ClaimInvitationRepository {
   }
 
   /**
-   * Atomically consumes a claim invitation using a database-level conditional update.
-   * Guarantees single-use semantics even under highly concurrent simultaneous requests.
-   * Fails (returns null) if the invitation is already consumed, expired, or not found.
+   * @deprecated Legacy mutation API. Callers must use redeemInvitationTransaction instead.
+   * Enforces single-owner invariant and rejects if the credential is already claimed.
    */
   static async consumeAtomic(
     id: string,
@@ -447,24 +554,55 @@ export class ClaimInvitationRepository {
     const consumedAt = new Date();
 
     if (this.useMemory) {
-      for (const [key, inv] of this.inMemoryInvitations.entries()) {
-        if (inv.id === id) {
-          // Atomic check-and-set: Reject if already consumed or expired
-          if (inv.consumedAt !== null || new Date(inv.expiresAt).getTime() <= Date.now()) {
-            return null;
-          }
-          inv.consumedAt = consumedAt;
-          inv.claimedByUserId = userId;
-          inv.claimedByHolderDid = holderDid || null;
-          this.inMemoryInvitations.set(key, inv);
-          return { ...inv };
-        }
+      const targetInv = Array.from(this.inMemoryInvitations.values()).find((inv) => inv.id === id);
+      if (!targetInv) return null;
+      if (targetInv.consumedAt !== null || new Date(targetInv.expiresAt).getTime() <= Date.now()) {
+        return null;
       }
-      return null;
+      // Single-owner check in memory
+      const existingConsumed = Array.from(this.inMemoryInvitations.values()).find(
+        (inv) =>
+          inv.credentialId === targetInv.credentialId &&
+          inv.consumedAt !== null &&
+          inv.claimedByUserId !== null &&
+          inv.id !== id
+      );
+      if (existingConsumed) {
+        throw new CredentialAlreadyClaimedError(
+          "This credential has already been claimed by another user."
+        );
+      }
+      targetInv.consumedAt = consumedAt;
+      targetInv.claimedByUserId = userId;
+      targetInv.claimedByHolderDid = holderDid || null;
+      return { ...targetInv };
     }
 
     try {
-      // Atomic conditional update at PostgreSQL level: matches ONLY if consumedAt IS NULL and not expired
+      // In production or live database mode:
+      const target = await prisma.claimInvitation.findUnique({
+        where: { id },
+      });
+      if (!target || target.consumedAt !== null || new Date(target.expiresAt).getTime() <= consumedAt.getTime()) {
+        return null;
+      }
+
+      // Check single-owner invariant before update
+      const existingOwner = await prisma.claimInvitation.findFirst({
+        where: {
+          credentialId: target.credentialId,
+          consumedAt: { not: null },
+          claimedByUserId: { not: null },
+          id: { not: id },
+        },
+      });
+      if (existingOwner) {
+        throw new CredentialAlreadyClaimedError(
+          "This credential has already been claimed by another user."
+        );
+      }
+
+      // Atomic conditional update at PostgreSQL level
       const updateResult = await prisma.claimInvitation.updateMany({
         where: {
           id,
@@ -479,7 +617,6 @@ export class ClaimInvitationRepository {
       });
 
       if (updateResult.count === 0) {
-        // Concurrency conflict: another request consumed it, or it expired
         return null;
       }
 
@@ -501,26 +638,29 @@ export class ClaimInvitationRepository {
         claimedByHolderDid: found.claimedByHolderDid,
         createdAt: found.createdAt,
       };
-    } catch (err) {
-      if (process.env.REQUIRE_POSTGRES_INTEGRATION === "true" || !this.useMemory) {
+    } catch (err: any) {
+      if (err instanceof ClaimError) {
         throw err;
       }
-      for (const [key, inv] of this.inMemoryInvitations.entries()) {
-        if (inv.id === id) {
-          if (inv.consumedAt !== null || new Date(inv.expiresAt).getTime() <= Date.now()) {
-            return null;
-          }
-          inv.consumedAt = consumedAt;
-          inv.claimedByUserId = userId;
-          inv.claimedByHolderDid = holderDid || null;
-          this.inMemoryInvitations.set(key, inv);
-          return { ...inv };
-        }
+      if (isSingleOwnerIndexViolation(err)) {
+        throw new CredentialAlreadyClaimedError(
+          "This credential has already been claimed by another user."
+        );
+      }
+      if (
+        process.env.REQUIRE_POSTGRES_INTEGRATION === "true" ||
+        process.env.NODE_ENV === "production" ||
+        !this.useMemory
+      ) {
+        throw err;
       }
       return null;
     }
   }
 
+  /**
+   * @deprecated Legacy alias for consumeAtomic. Callers must use redeemInvitationTransaction instead.
+   */
   static async markConsumed(
     id: string,
     userId: string,

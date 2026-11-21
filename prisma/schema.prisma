@@ -291,6 +291,7 @@ model ClaimInvitation {
   @@index([tokenHash])
   @@index([certificateNumber])
   @@index([recipientEmail])
+  @@index([claimedByUserId, consumedAt])
   @@map("claim_invitations")
 }
 

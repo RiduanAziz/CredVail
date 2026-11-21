@@ -56,12 +56,25 @@ jobs:
       - name: Synchronize PostgreSQL Schema
         run: npx prisma db push --skip-generate
 
+      - name: Pre-Index Data Integrity Diagnostic
+        run: |
+          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-data-integrity-check.sql
+
+      - name: Apply Single-Owner Partial Unique Index
+        run: |
+          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-single-owner-index.sql
+
+      - name: Verify Single-Owner Partial Unique Index Definition and Validity
+        run: |
+          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-verify-single-owner-index.sql
+
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
         run: |
           npx vitest run \
             test/integration/postgres-claim-concurrency.test.ts \
             test/integration/postgres-h13-resilience.test.ts \
             test/integration/postgres-claim-rate-limiter.test.ts \
+            test/integration/postgres-wallet-ownership.test.ts \
             --reporter=verbose \
             --reporter=json \
             --outputFile=vitest-report.json
@@ -75,7 +88,7 @@ jobs:
           echo "- **PostgreSQL Engine**: \`postgres:16-alpine\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Enforcement Flag**: \`REQUIRE_POSTGRES_INTEGRATION=true\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Node.js Version**: 22" >> $GITHUB_STEP_SUMMARY
-          echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`, \`test/integration/postgres-claim-rate-limiter.test.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`, \`test/integration/postgres-claim-rate-limiter.test.ts\`, \`test/integration/postgres-wallet-ownership.test.ts\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f vitest-report.json ]; then
             PASSED=$(node -e "try { const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests ?? -1); } catch { console.log(-1); }")
@@ -89,9 +102,9 @@ jobs:
             echo "- **Skipped**: $SKIPPED" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
 
-            # Strictly enforce: numTotalTests === 38, numPassedTests === 38, numFailedTests === 0, numPendingTests === 0
-            if [ "$TOTAL" -ne 38 ] || [ "$PASSED" -ne 38 ] || [ "$FAILED" -ne 0 ] || [ "$SKIPPED" -ne 0 ]; then
-              echo "❌ CI Verification Gate Failed: Expected exactly 38 passed tests with 0 failed and 0 skipped." >> $GITHUB_STEP_SUMMARY
+            # Strictly enforce: numTotalTests === 50, numPassedTests === 50, numFailedTests === 0, numPendingTests === 0
+            if [ "$TOTAL" -ne 50 ] || [ "$PASSED" -ne 50 ] || [ "$FAILED" -ne 0 ] || [ "$SKIPPED" -ne 0 ]; then
+              echo "❌ CI Verification Gate Failed: Expected exactly 50 passed tests with 0 failed and 0 skipped." >> $GITHUB_STEP_SUMMARY
               echo "Got: Total=$TOTAL, Passed=$PASSED, Failed=$FAILED, Skipped=$SKIPPED"
               exit 1
             fi
@@ -133,3 +146,14 @@ jobs:
           echo "- **PGRL-09 / PGRL-10**: HTTP 429 headers and HTTP 503 fail-closed typed CLAIM_RATE_LIMIT_UNAVAILABLE verified" >> $GITHUB_STEP_SUMMARY
           echo "- **PGRL-11**: X-Forwarded-For and IP spoofing cannot bypass authenticated session bucket" >> $GITHUB_STEP_SUMMARY
           echo "- **PGRL-12**: Lock-wait boundary condition verified — client waiting on row lock captures post-lock clock_timestamp(), correctly evaluating window expiry" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Durable Wallet Ownership, Retrieval & Single-Owner Authorization (H133-01 to H133-12)" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-01 / H133-02**: Claimed credential retrievable after memory wipe; independent Prisma clients retrieve identical state" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-03 / H133-04**: Strict user isolation verified; unclaimed invitations and foreign tenant records excluded" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-05 / H133-06**: Exact credential identifier and certificate-number ownership succeeds; mismatches strictly fail" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-07**: Empty in-memory wallet cannot bypass presentation ownership check" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-08**: Single-owner invariant enforced: concurrent redemption races for same credential allow exactly one winner (200) and reject loser with typed CREDENTIAL_ALREADY_CLAIMED (409)" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-09**: GET wallet API strictly scopes to authenticated session.sub and ignores caller-supplied query parameters" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-10**: Presentation endpoint rejects foreign, unclaimed, or mixed credentials before verification; challenge nonce remains unconsumed" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-11**: Legitimate claimant retrieves and authorizes presentation after cache wipe; challenge nonce consumed atomically" >> $GITHUB_STEP_SUMMARY
+          echo "- **H133-12**: Database outage produces sanitized HTTP 503 WALLET_STORAGE_UNAVAILABLE behavior without burning nonces" >> $GITHUB_STEP_SUMMARY
