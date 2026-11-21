@@ -161,30 +161,103 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           AND "claimedByUserId" IS NOT NULL;
       `);
 
+      // 1b. Ensure ownership monotonicity trigger exists in PostgreSQL test container
+      await prisma.$executeRawUnsafe(`
+        CREATE OR REPLACE FUNCTION trg_enforce_claim_invitation_monotonicity()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          IF OLD."credentialId" IS DISTINCT FROM NEW."credentialId" THEN
+            RAISE EXCEPTION 'claim_invitations ownership violation: credentialId is immutable once created (attempted to change % to %)',
+              OLD."credentialId", NEW."credentialId"
+              USING ERRCODE = '23514';
+          END IF;
+
+          IF OLD."consumedAt" IS NOT NULL THEN
+            IF NEW."consumedAt" IS NULL THEN
+              RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt cannot be reset to NULL once consumed'
+                USING ERRCODE = '23514';
+            END IF;
+            IF OLD."consumedAt" IS DISTINCT FROM NEW."consumedAt" THEN
+              RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt is immutable once set (attempted to change % to %)',
+                OLD."consumedAt", NEW."consumedAt"
+                USING ERRCODE = '23514';
+            END IF;
+          END IF;
+
+          IF OLD."claimedByUserId" IS NOT NULL THEN
+            IF NEW."claimedByUserId" IS NULL THEN
+              RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId cannot be cleared once assigned'
+                USING ERRCODE = '23514';
+            END IF;
+            IF OLD."claimedByUserId" IS DISTINCT FROM NEW."claimedByUserId" THEN
+              RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId is immutable once assigned (attempted to change % to %)',
+                OLD."claimedByUserId", NEW."claimedByUserId"
+                USING ERRCODE = '23514';
+            END IF;
+          END IF;
+
+          IF OLD."consumedAt" IS NULL AND NEW."consumedAt" IS NOT NULL AND NEW."claimedByUserId" IS NULL THEN
+            RAISE EXCEPTION 'claim_invitations ownership violation: cannot set consumedAt without assigning claimedByUserId'
+              USING ERRCODE = '23514';
+          END IF;
+
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS trg_claim_invitation_monotonicity ON "claim_invitations";
+
+        CREATE TRIGGER trg_claim_invitation_monotonicity
+        BEFORE UPDATE ON "claim_invitations"
+        FOR EACH ROW
+        EXECUTE FUNCTION trg_enforce_claim_invitation_monotonicity();
+      `);
+
       // 2. Verify partial unique index exists and is valid in PostgreSQL catalog
       const catalogCheck = await prisma.$queryRaw<any[]>`
         SELECT 
           i.indisunique,
           i.indisvalid,
           i.indisready,
+          am.amname,
+          i.indnkeyatts,
           a.attname,
           pg_get_expr(i.indpred, i.indrelid) AS pred
         FROM pg_index i
         JOIN pg_class c ON c.oid = i.indexrelid
         JOIN pg_class t ON t.oid = i.indrelid
         JOIN pg_namespace n ON n.oid = t.relnamespace
+        JOIN pg_am am ON am.oid = c.relam
         JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = i.indkey[0]
         WHERE c.relname = 'claim_invitations_one_consumed_owner_per_credential_uq'
           AND t.relname = 'claim_invitations'
+          AND n.nspname = 'public'
       `;
       if (!catalogCheck || catalogCheck.length === 0) {
-        throw new Error("H1.3.3.1 index verification failed: partial unique index not found in pg_index");
+        throw new Error("H1.3.3.1 index verification failed: partial unique index not found in pg_index in schema public");
       }
       if (!catalogCheck[0].indisunique || !catalogCheck[0].indisvalid || !catalogCheck[0].indisready) {
         throw new Error("H1.3.3.1 index verification failed: index is not unique, valid, or ready");
       }
+      if (catalogCheck[0].amname !== "btree") {
+        throw new Error(`H1.3.3.1 index verification failed: access method is ${catalogCheck[0].amname}, expected btree`);
+      }
+      if (Number(catalogCheck[0].indnkeyatts) !== 1) {
+        throw new Error(`H1.3.3.1 index verification failed: key count is ${catalogCheck[0].indnkeyatts}, expected 1`);
+      }
       if (catalogCheck[0].attname !== "credentialId") {
         throw new Error(`H1.3.3.1 index verification failed: indexed column is ${catalogCheck[0].attname}, expected credentialId`);
+      }
+      const rawPred = String(catalogCheck[0].pred || "");
+      const predNorm = rawPred
+        .toLowerCase()
+        .replace(/["()]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (predNorm !== "consumedat is not null and claimedbyuserid is not null") {
+        throw new Error(
+          `H1.3.3.1 index verification failed: predicate does not exactly match expected invariant (expected: "consumedat is not null and claimedbyuserid is not null", got: "${predNorm}")`
+        );
       }
 
       const nowTs = Date.now();
@@ -874,24 +947,53 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         i.indisunique,
         i.indisvalid,
         i.indisready,
+        am.amname,
+        i.indnkeyatts,
         a.attname,
         pg_get_expr(i.indpred, i.indrelid) AS pred
       FROM pg_index i
       JOIN pg_class c ON c.oid = i.indexrelid
       JOIN pg_class t ON t.oid = i.indrelid
       JOIN pg_namespace n ON n.oid = t.relnamespace
+      JOIN pg_am am ON am.oid = c.relam
       JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = i.indkey[0]
       WHERE c.relname = 'claim_invitations_one_consumed_owner_per_credential_uq'
         AND t.relname = 'claim_invitations'
+        AND n.nspname = 'public'
     `;
     expect(indexCatalogRows.length).toBe(1);
     expect(indexCatalogRows[0].indisunique).toBe(true);
     expect(indexCatalogRows[0].indisvalid).toBe(true);
     expect(indexCatalogRows[0].indisready).toBe(true);
+    expect(indexCatalogRows[0].amname).toBe("btree");
+    expect(Number(indexCatalogRows[0].indnkeyatts)).toBe(1);
     expect(indexCatalogRows[0].attname).toBe("credentialId");
-    const predStr = String(indexCatalogRows[0].pred || "");
-    expect(predStr).toContain("consumedAt IS NOT NULL");
-    expect(predStr).toContain("claimedByUserId IS NOT NULL");
+    const rawPredStr = String(indexCatalogRows[0].pred || "");
+    const normalizePredicate = (pred: string): string =>
+      pred
+        .toLowerCase()
+        .replace(/["()]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const isExactSingleOwnerPredicate = (pred: string): boolean =>
+      normalizePredicate(pred) === "consumedat is not null and claimedbyuserid is not null";
+
+    expect(isExactSingleOwnerPredicate(rawPredStr)).toBe(true);
+    expect(normalizePredicate(rawPredStr)).toBe("consumedat is not null and claimedbyuserid is not null");
+
+    // Negative assertions: Demonstrate that predicates with additional clauses, missing clauses, or altered semantics fail the equality check
+    const narrowerPredicateWithAdditionalClause = '(("consumedAt" IS NOT NULL) AND ("claimedByUserId" IS NOT NULL) AND ("revokedAt" IS NULL))';
+    expect(isExactSingleOwnerPredicate(narrowerPredicateWithAdditionalClause)).toBe(false);
+
+    const missingClaimedByUser = '("consumedAt" IS NOT NULL)';
+    expect(isExactSingleOwnerPredicate(missingClaimedByUser)).toBe(false);
+
+    const missingConsumedAt = '("claimedByUserId" IS NOT NULL)';
+    expect(isExactSingleOwnerPredicate(missingConsumedAt)).toBe(false);
+
+    const alteredDisjunctivePredicate = '(("consumedAt" IS NOT NULL) OR ("claimedByUserId" IS NOT NULL))';
+    expect(isExactSingleOwnerPredicate(alteredDisjunctivePredicate)).toBe(false);
 
     // Verify an unrelated unique-constraint violation (duplicate tokenHash) is NOT mapped to CredentialAlreadyClaimedError
     let unrelatedViolationError: any = null;
@@ -913,6 +1015,120 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     expect(unrelatedViolationError).toBeDefined();
     expect(unrelatedViolationError).not.toBeInstanceOf(CredentialAlreadyClaimedError);
 
+    // Verify ambiguous CredentialRecord.credentialId unique collision within claim transaction
+    // is NOT converted to CredentialAlreadyClaimedError, preserves original error, and rolls back cleanly
+    const certNumUnrelatedCred = `H133-UNRELATED-CRED-${nowTs}`;
+    const credIdUnrelatedCred = `urn:uuid:${crypto.randomUUID()}`;
+    await prisma.credentialRecord.create({
+      data: {
+        credentialId: credIdUnrelatedCred,
+        certificateNumber: certNumUnrelatedCred,
+        tenantId,
+        batchId,
+        recipientId: recipientIdAlice,
+        leafHash: "leaf_hash_unrelated_cred",
+        merkleIndex: 88,
+        bitstringIndex: 88,
+        state: "ISSUED",
+        claimsData: { course_name: "Unrelated Unique Test" },
+        vcPayloadJson: signedVcAlice as any,
+      },
+    });
+
+    const { rawToken: tokenUnrelatedCred } = await ClaimInvitationService.createInvitation({
+      credentialId: credIdUnrelatedCred,
+      certificateNumber: certNumUnrelatedCred,
+      recipientEmail: aliceEmail,
+      tenantId,
+    });
+    const invUnrelatedCred = await prisma.claimInvitation.findFirstOrThrow({
+      where: { certificateNumber: certNumUnrelatedCred },
+    });
+
+    let credIdCollisionError: any = null;
+    try {
+      await ClaimInvitationRepository.redeemInvitationTransaction({
+        invitationId: invUnrelatedCred.id,
+        tokenHash: invUnrelatedCred.tokenHash,
+        userId: userIdAlice,
+        certificateNumber: certNumUnrelatedCred,
+        tenantId,
+        onPostConsume: async (tx) => {
+          // Trigger collision on CredentialRecord.credentialId (credAlice.credentialId already exists!)
+          await tx.credentialRecord.create({
+            data: {
+              credentialId: credAlice.credentialId,
+              certificateNumber: `DUP-CERT-${Date.now()}`,
+              tenantId,
+              batchId,
+              recipientId: recipientIdAlice,
+              leafHash: "leaf_hash_dup",
+              merkleIndex: 89,
+              bitstringIndex: 89,
+              state: "ISSUED",
+              claimsData: {},
+              vcPayloadJson: {},
+            },
+          });
+        },
+      });
+    } catch (err: any) {
+      credIdCollisionError = err;
+    }
+    expect(credIdCollisionError).toBeDefined();
+    expect(credIdCollisionError).not.toBeInstanceOf(CredentialAlreadyClaimedError);
+    expect(
+      credIdCollisionError.code === "P2002" || String(credIdCollisionError).includes("23505")
+    ).toBe(true);
+
+    const invAfterCollisionRollback = await prisma.claimInvitation.findUnique({
+      where: { id: invUnrelatedCred.id },
+    });
+    expect(invAfterCollisionRollback?.consumedAt).toBeNull();
+    expect(invAfterCollisionRollback?.claimedByUserId).toBeNull();
+
+    // Verify account deletion cannot release the ownership slot or break the single-owner invariant
+    let deletionBlocked = false;
+    try {
+      await prisma.user.delete({
+        where: { id: winnerUserId },
+      });
+    } catch (delErr: any) {
+      deletionBlocked = true;
+      expect(delErr.message).toMatch(/foreign key|constraint|restrict|23503|P2003/i);
+    }
+    expect(deletionBlocked).toBe(true);
+
+    // Verify ownership record remains intact in PostgreSQL
+    const ownerAfterAttemptedDelete = await prisma.claimInvitation.findFirst({
+      where: {
+        credentialId: credIdRaced,
+        claimedByUserId: winnerUserId,
+        consumedAt: { not: null },
+      },
+    });
+    expect(ownerAfterAttemptedDelete).toBeDefined();
+    expect(ownerAfterAttemptedDelete?.claimedByUserId).toBe(winnerUserId);
+
+    // Attempting to claim the second pending invitation with another user still fails with CREDENTIAL_ALREADY_CLAIMED
+    let secondClaimAfterDeleteAttemptError: any = null;
+    try {
+      await WalletService.claimCredential(
+        {
+          certificateNumber: certNumRaced,
+          claimToken: tokenB,
+          userEmail: bobEmail,
+          userId: userIdBob,
+          userEmailVerified: true,
+        },
+        userIdBob
+      );
+    } catch (err: any) {
+      secondClaimAfterDeleteAttemptError = err;
+    }
+    expect(secondClaimAfterDeleteAttemptError).toBeInstanceOf(CredentialAlreadyClaimedError);
+    expect(secondClaimAfterDeleteAttemptError.code).toBe("CREDENTIAL_ALREADY_CLAIMED");
+
     // Verify alternate claim API (consumeAtomic) cannot bypass the single-owner invariant
     let consumeAtomicError: any = null;
     try {
@@ -924,6 +1140,66 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
       consumeAtomicError = err;
     }
     expect(consumeAtomicError).toBeInstanceOf(CredentialAlreadyClaimedError);
+
+    // Verify Ownership-State Monotonicity Trigger rejects all invalid state transitions on consumed invitation
+    // 1. Resetting consumedAt to null must be rejected by PostgreSQL trigger (ERRCODE 23514)
+    let resetConsumedAtError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: consumedOwners[0].id },
+        data: { consumedAt: null },
+      });
+    } catch (err: any) {
+      resetConsumedAtError = err;
+    }
+    expect(resetConsumedAtError).toBeDefined();
+    expect(String(resetConsumedAtError.message || resetConsumedAtError)).toMatch(/monotonicity|ownership violation|consumedAt cannot be reset|23514/i);
+
+    // 2. Clearing claimedByUserId to null must be rejected by PostgreSQL trigger (ERRCODE 23514)
+    let clearClaimantError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: consumedOwners[0].id },
+        data: { claimedByUserId: null },
+      });
+    } catch (err: any) {
+      clearClaimantError = err;
+    }
+    expect(clearClaimantError).toBeDefined();
+    expect(String(clearClaimantError.message || clearClaimantError)).toMatch(/monotonicity|ownership violation|claimedByUserId cannot be cleared|23514/i);
+
+    // 3. Reassigning claimedByUserId to another user must be rejected by PostgreSQL trigger (ERRCODE 23514)
+    let reassignClaimantError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: consumedOwners[0].id },
+        data: { claimedByUserId: loserUserId },
+      });
+    } catch (err: any) {
+      reassignClaimantError = err;
+    }
+    expect(reassignClaimantError).toBeDefined();
+    expect(String(reassignClaimantError.message || reassignClaimantError)).toMatch(/monotonicity|ownership violation|claimedByUserId is immutable|23514/i);
+
+    // 4. Altering credentialId on existing claim invitation must be rejected by PostgreSQL trigger (ERRCODE 23514)
+    let alterCredentialIdError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: consumedOwners[0].id },
+        data: { credentialId: `urn:uuid:${crypto.randomUUID()}` },
+      });
+    } catch (err: any) {
+      alterCredentialIdError = err;
+    }
+    expect(alterCredentialIdError).toBeDefined();
+    expect(String(alterCredentialIdError.message || alterCredentialIdError)).toMatch(/monotonicity|ownership violation|credentialId is immutable|23514/i);
+
+    // 5. Verify the winner's ownership record remains intact in PostgreSQL after all rejected mutations
+    const ownerAfterRejectedMutations = await prisma.claimInvitation.findUnique({
+      where: { id: consumedOwners[0].id },
+    });
+    expect(ownerAfterRejectedMutations?.claimedByUserId).toBe(winnerUserId);
+    expect(ownerAfterRejectedMutations?.consumedAt).not.toBeNull();
   });
 
   // H133-09: GET wallet API ignores arbitrary caller-supplied userId and holderId parameters

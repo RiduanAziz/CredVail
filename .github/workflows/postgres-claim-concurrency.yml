@@ -34,6 +34,7 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql://credvail_user:credvail_ci_password_2026@localhost:5432/credvail_test_db?schema=public"
+      PG_DSN: "postgresql://credvail_user:credvail_ci_password_2026@localhost:5432/credvail_test_db"
       REQUIRE_POSTGRES_INTEGRATION: "true"
       NODE_ENV: test
 
@@ -44,8 +45,8 @@ jobs:
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: "npm"
+            node-version: 22
+            cache: "npm"
 
       - name: Install dependencies
         run: npm ci
@@ -56,17 +57,29 @@ jobs:
       - name: Synchronize PostgreSQL Schema
         run: npx prisma db push --skip-generate
 
+      - name: Verify PostgreSQL Connectivity (Preflight)
+        run: |
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -c "SELECT current_database(), current_schema(), version();"
+
       - name: Pre-Index Data Integrity Diagnostic
         run: |
-          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-data-integrity-check.sql
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -f prisma/sql/h1-3-3-data-integrity-check.sql
 
       - name: Apply Single-Owner Partial Unique Index
         run: |
-          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-single-owner-index.sql
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -f prisma/sql/h1-3-3-single-owner-index.sql
 
       - name: Verify Single-Owner Partial Unique Index Definition and Validity
         run: |
-          psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f prisma/sql/h1-3-3-verify-single-owner-index.sql
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -f prisma/sql/h1-3-3-verify-single-owner-index.sql
+
+      - name: Apply Ownership Monotonicity Trigger
+        run: |
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -f prisma/sql/h1-3-3-ownership-monotonicity-trigger.sql
+
+      - name: Verify Ownership Monotonicity Trigger Definition and Validity
+        run: |
+          psql -v ON_ERROR_STOP=1 "$PG_DSN" -f prisma/sql/h1-3-3-verify-ownership-trigger.sql
 
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
         run: |

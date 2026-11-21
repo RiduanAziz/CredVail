@@ -286,7 +286,7 @@ model ClaimInvitation {
 
   tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   credential         CredentialRecord   @relation(fields: [credentialId], references: [credentialId], onDelete: Cascade)
-  claimedByUser      User?              @relation(fields: [claimedByUserId], references: [id], onDelete: SetNull)
+  claimedByUser      User?              @relation(fields: [claimedByUserId], references: [id], onDelete: Restrict)
 
   @@index([tokenHash])
   @@index([certificateNumber])

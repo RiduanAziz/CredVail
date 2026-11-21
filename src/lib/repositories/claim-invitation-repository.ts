@@ -65,29 +65,35 @@ export class CredentialAlreadyClaimedError extends ClaimError {
   }
 }
 
-function isSingleOwnerIndexViolation(err: any): boolean {
+/**
+ * Case A: Explicitly identifies the single-owner partial unique index by name.
+ * Only returns true when the constraint/index name is verified in the error.
+ */
+export function isSingleOwnerIndexViolation(err: any): boolean {
   if (!err) return false;
-  if (typeof err.message === "string") {
-    const msg = err.message.toLowerCase();
-    if (msg.includes("claim_invitations_one_consumed_owner_per_credential_uq")) return true;
+  const indexName = "claim_invitations_one_consumed_owner_per_credential_uq";
+  if (typeof err.message === "string" && err.message.toLowerCase().includes(indexName)) {
+    return true;
   }
   if (err.code === "P2002") {
     const target = err.meta?.target;
-    if (Array.isArray(target) && target.includes("credentialId")) return true;
-    if (
-      typeof target === "string" &&
-      (target.includes("credentialId") ||
-        target.includes("claim_invitations_one_consumed_owner_per_credential_uq"))
-    ) {
-      return true;
-    }
+    if (typeof target === "string" && target.includes(indexName)) return true;
+    if (Array.isArray(target) && target.includes(indexName)) return true;
+    if (err.meta?.constraint && String(err.meta.constraint).includes(indexName)) return true;
   }
   return false;
 }
 
-function isAnyUniqueViolation(err: any): boolean {
+export const isExplicitSingleOwnerIndexViolation = isSingleOwnerIndexViolation;
+
+/**
+ * Case B, C, D: Detects whether any unique constraint violation occurred (Prisma P2002 or Postgres 23505).
+ * Never classifies ambiguous violations as single-owner conflicts without explicit index confirmation or post-recheck.
+ */
+export function isAnyUniqueViolation(err: any): boolean {
   if (!err) return false;
   if (err.code === "P2002") return true;
+  if (err.code === "23505") return true;
   if (typeof err.message === "string") {
     const msg = err.message.toLowerCase();
     if (msg.includes("unique constraint") || msg.includes("23505")) return true;
@@ -95,10 +101,11 @@ function isAnyUniqueViolation(err: any): boolean {
   return false;
 }
 
-function isRetryableTransactionConflict(err: any): boolean {
+export function isRetryableTransactionConflict(err: any): boolean {
   if (!err) return false;
   if (isAnyUniqueViolation(err)) return false; // Unique violations are deterministic and must fail fast with 409
   if (err.code === "P2034") return true;
+  if (err.code === "40001" || err.code === "40P01" || err.code === "40p01") return true;
   if (typeof err.message === "string") {
     const msg = err.message.toLowerCase();
     if (msg.includes("40001") || msg.includes("could not serialize access")) return true;
@@ -476,15 +483,14 @@ export class ClaimInvitationRepository {
           throw err;
         }
 
-        // Translate PostgreSQL partial unique index violation into typed domain error
-        if (isSingleOwnerIndexViolation(err)) {
+        // Case A — Explicit single-owner index identity
+        if (isExplicitSingleOwnerIndexViolation(err)) {
           throw new CredentialAlreadyClaimedError(
-            "This credential has already been claimed by another user."
+            "This credential has already been claimed by another authenticated account."
           );
         }
 
-        // If generic unique violation occurred without explicit index metadata,
-        // perform a safe post-failure ownership recheck on credentialId
+        // Case B & C — Ambiguous Prisma P2002 or raw PostgreSQL 23505
         if (isAnyUniqueViolation(err)) {
           try {
             const target = await prisma.claimInvitation.findUnique({
@@ -498,12 +504,14 @@ export class ClaimInvitationRepository {
                   credentialId: targetCredId,
                   consumedAt: { not: null },
                   claimedByUserId: { not: null },
+                  id: { not: invitationId },
                 },
                 select: { id: true, claimedByUserId: true },
               });
               if (existingClaim) {
+                // Case B: Committed consumed owner confirmed for target credential
                 throw new CredentialAlreadyClaimedError(
-                  "This credential has already been claimed by another user."
+                  "This credential has already been claimed by another authenticated account."
                 );
               }
             }
@@ -512,8 +520,8 @@ export class ClaimInvitationRepository {
               throw recheckErr;
             }
           }
-          // If no existing claim for credentialId exists, this is an unrelated unique violation (e.g. tokenHash).
-          // Do NOT translate to CredentialAlreadyClaimedError!
+          // Case C: Unrelated unique violation (e.g. CredentialRecord.credentialId, duplicate tokenHash).
+          // Rethrow the original database error unchanged.
           throw err;
         }
 
@@ -642,10 +650,40 @@ export class ClaimInvitationRepository {
       if (err instanceof ClaimError) {
         throw err;
       }
-      if (isSingleOwnerIndexViolation(err)) {
+      if (isExplicitSingleOwnerIndexViolation(err)) {
         throw new CredentialAlreadyClaimedError(
-          "This credential has already been claimed by another user."
+          "This credential has already been claimed by another authenticated account."
         );
+      }
+      if (isAnyUniqueViolation(err)) {
+        try {
+          const target = await prisma.claimInvitation.findUnique({
+            where: { id },
+            select: { credentialId: true },
+          });
+          const targetCredId = target?.credentialId;
+          if (targetCredId) {
+            const existingClaim = await prisma.claimInvitation.findFirst({
+              where: {
+                credentialId: targetCredId,
+                consumedAt: { not: null },
+                claimedByUserId: { not: null },
+                id: { not: id },
+              },
+              select: { id: true, claimedByUserId: true },
+            });
+            if (existingClaim) {
+              throw new CredentialAlreadyClaimedError(
+                "This credential has already been claimed by another authenticated account."
+              );
+            }
+          }
+        } catch (recheckErr) {
+          if (recheckErr instanceof CredentialAlreadyClaimedError) {
+            throw recheckErr;
+          }
+        }
+        throw err;
       }
       if (
         process.env.REQUIRE_POSTGRES_INTEGRATION === "true" ||
