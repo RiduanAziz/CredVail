@@ -33,7 +33,7 @@
  * - H121-21: Browser wallet engine generates valid NIST P-256 did:key and signs presentations.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { BatchProcessingService } from "@/lib/services/batch-processing-service";
@@ -52,6 +52,10 @@ import { POST as claimRoute } from "@/app/api/v1/wallet/claim/route";
 import { GET as claimExportRoute } from "@/app/api/v1/tenants/[slug]/batches/[id]/claim-export/route";
 import { GET as publicLookupRoute } from "@/app/api/v1/verify/lookup/[id]/route";
 import { checkClaimRateLimit, resetClaimRateLimiter } from "@/lib/services/claim-rate-limiter";
+import {
+  ClaimRateLimitRepository,
+  InMemoryClaimRateLimitRepository,
+} from "@/lib/repositories/claim-rate-limit-repository";
 
 describe("CREDVAIL H1.2.1: Security Closure & Concurrency Verification", () => {
   const tenantSlug = "univ-h121-alpha";
@@ -67,6 +71,7 @@ describe("CREDVAIL H1.2.1: Security Closure & Concurrency Verification", () => {
     ClaimInvitationRepository.resetInMemoryStore();
     CredentialRepository.resetInMemoryStore();
     WalletService.resetInMemoryStore();
+    ClaimRateLimitRepository.setTestDouble(new InMemoryClaimRateLimitRepository());
     resetClaimRateLimiter();
     inMemoryTenantStore.clear();
 
@@ -1065,38 +1070,38 @@ describe("CREDVAIL H1.2.1: Security Closure & Concurrency Verification", () => {
   // Workstream 4: Claim Rate-Limiter Scoping & Process Boundaries (H121-18 to H121-19)
   // =========================================================================
 
-  it("H121-18: rate limiter is scoped to session.sub; multiple accounts maintain independent buckets", () => {
+  it("H121-18: rate limiter is scoped to session.sub; multiple accounts maintain independent buckets", async () => {
     resetClaimRateLimiter();
 
     // Account A consumes 10 attempts
     for (let i = 0; i < 10; i++) {
-      const res = checkClaimRateLimit("user:account-A");
+      const res = await checkClaimRateLimit("user:account-A");
       expect(res.allowed).toBe(true);
     }
     // 11th attempt for Account A is blocked
-    const blockedA = checkClaimRateLimit("user:account-A");
+    const blockedA = await checkClaimRateLimit("user:account-A");
     expect(blockedA.allowed).toBe(false);
     expect(blockedA.retryAfter).toBeGreaterThan(0);
 
     // Account B is NOT blocked; it has an independent bucket
-    const allowedB = checkClaimRateLimit("user:account-B");
+    const allowedB = await checkClaimRateLimit("user:account-B");
     expect(allowedB.allowed).toBe(true);
   });
 
-  it("H121-19: process-level reset restores rate-limiter bucket capacity", () => {
+  it("H121-19: process-level reset restores rate-limiter bucket capacity", async () => {
     resetClaimRateLimiter();
 
     // Exhaust bucket
     for (let i = 0; i < 10; i++) {
-      checkClaimRateLimit("user:account-exhausted");
+      await checkClaimRateLimit("user:account-exhausted");
     }
-    expect(checkClaimRateLimit("user:account-exhausted").allowed).toBe(false);
+    expect((await checkClaimRateLimit("user:account-exhausted")).allowed).toBe(false);
 
     // Reset rate limiter (simulating process restart)
     resetClaimRateLimiter();
 
     // Immediate recovery
-    expect(checkClaimRateLimit("user:account-exhausted").allowed).toBe(true);
+    expect((await checkClaimRateLimit("user:account-exhausted")).allowed).toBe(true);
   });
 
   // =========================================================================
@@ -1178,5 +1183,9 @@ describe("CREDVAIL H1.2.1: Security Closure & Concurrency Verification", () => {
     const sigBuffer = Buffer.from(signedPresentation.proof.jws, "base64url");
     expect(sigBuffer.length).toBe(64);
     expect(signedPresentation.proof.jws.length).toBe(86);
+  });
+
+  afterAll(() => {
+    ClaimRateLimitRepository.resetTestDouble();
   });
 });

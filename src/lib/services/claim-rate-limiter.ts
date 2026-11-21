@@ -1,49 +1,67 @@
 /**
- * Sliding-window rate limiter for credential claiming.
- * Scoped primarily to the authenticated user ID (`user:${session.sub}`) to prevent
+ * Distributed PostgreSQL-backed rate limiter for credential claiming (H1.3.2 / H1.3.2.1).
+ * Scoped strictly to the authenticated user ID (`user:${session.sub}`) to prevent
  * bypasses via forged X-Forwarded-For or client IP headers.
- * 
- * SCOPE AND OPERATIONAL BOUNDARIES (H1.2.1 Documentation):
+ *
+ * ARCHITECTURAL SPECIFICATION:
  * 1. Scope: Scoped per authenticated account (`user:${session.sub}`).
  *    - Protects a user's wallet and credential claims from high-frequency automated brute-force attacks.
- *    - Sybil / Multiple Accounts: Multiple distinct authenticated accounts maintain independent buckets.
- * 2. Process-Local State:
- *    - Counters are stored in a process-local in-memory Map.
- *    - Process Restarts: Process restart or container redeployment resets counters to zero.
- *    - Multi-Instance Topologies: Distinct application instances do NOT share counters. In multi-instance
- *      deployments without sticky sessions, an attacker routing requests across N nodes can achieve
- *      N * CLAIM_RATE_LIMIT_MAX attempts per minute. (Distributed Redis rate-limiting is scheduled for H2).
- * 3. Header-Spoofing Immunity:
- *    - Immune to forged `X-Forwarded-For`, `CF-Connecting-IP`, or `X-Real-IP` headers because the rate-limiter
- *      is keyed on server-validated JWT `session.sub`.
+ *    - Multiple distinct authenticated accounts maintain independent rate-limit buckets.
+ * 2. Shared Source of Truth:
+ *    - Buckets are persisted in PostgreSQL table `claim_rate_limit_buckets`.
+ *    - Application instances coordinate via serialized access for the same bucket using PostgreSQL row-level locking (`SELECT ... FOR UPDATE`).
+ *    - Authoritative time is captured via `SELECT clock_timestamp()` strictly after row-lock acquisition.
+ *    - Process restarts and multi-instance scaling preserve rate-limit state without leakage.
+ * 3. Privacy & Pseudonymization:
+ *    - Identifiers are hashed using a domain-separated SHA-256 digest (`credvail:claim-rate-limit:v1:${identifier}`)
+ *      to derive a deterministic SHA-256 pseudonymous key before database storage.
+ *    - Raw user identifiers are never persisted in the bucket table or exposed in application logs.
+ *    - Security Note: This domain-separated SHA-256 digest provides pseudonymous key derivation
+ *      to decouple the rate-limit table from user identity records. It does not claim full cryptographic
+ *      anonymity against dictionary attacks on low-entropy identifiers.
+ * 4. Fail-Closed:
+ *    - Any database outage or connection failure rejects the claim with HTTP 503 (CLAIM_RATE_LIMIT_UNAVAILABLE).
+ *    - Production strictly prohibits silent fallback to in-memory maps.
  */
-interface ClaimRateLimitRecord {
-  count: number;
-  resetAt: number;
+
+import {
+  ClaimRateLimitRepository,
+  ClaimRateLimitUnavailableError,
+  InMemoryClaimRateLimitRepository,
+  RateLimitResult,
+} from "../repositories/claim-rate-limit-repository.ts";
+
+export { ClaimRateLimitUnavailableError };
+export type { RateLimitResult };
+
+export const CLAIM_RATE_LIMIT_MAX = 10;
+export const CLAIM_RATE_LIMIT_WINDOW_SECONDS = 60;
+
+/**
+ * Checks and consumes a claim attempt for the specified authenticated identifier.
+ * Returns { allowed: true } or { allowed: false, retryAfter: number }.
+ * Throws ClaimRateLimitUnavailableError if the database is unreachable.
+ */
+export async function checkClaimRateLimit(identifier: string): Promise<RateLimitResult> {
+  try {
+    return await ClaimRateLimitRepository.consumeAttempt(identifier);
+  } catch (err: any) {
+    if (err instanceof ClaimRateLimitUnavailableError) {
+      throw err;
+    }
+    throw new ClaimRateLimitUnavailableError(
+      "Claim protection is temporarily unavailable. Please retry shortly.",
+      err
+    );
+  }
 }
 
-const claimRateLimitMap = new Map<string, ClaimRateLimitRecord>();
-const CLAIM_RATE_LIMIT_MAX = 10; // Max 10 claim attempts per minute
-const CLAIM_RATE_LIMIT_WINDOW_MS = 60 * 1000;
-
-export function checkClaimRateLimit(identifier: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const record = claimRateLimitMap.get(identifier);
-
-  if (!record || now > record.resetAt) {
-    claimRateLimitMap.set(identifier, { count: 1, resetAt: now + CLAIM_RATE_LIMIT_WINDOW_MS });
-    return { allowed: true };
-  }
-
-  if (record.count >= CLAIM_RATE_LIMIT_MAX) {
-    const retryAfter = Math.ceil((record.resetAt - now) / 1000);
-    return { allowed: false, retryAfter };
-  }
-
-  record.count++;
-  return { allowed: true };
-}
-
+/**
+ * Resets the in-memory test double rate limiter (for isolated unit tests).
+ */
 export function resetClaimRateLimiter(): void {
-  claimRateLimitMap.clear();
+  const instance = ClaimRateLimitRepository.instance;
+  if (instance instanceof InMemoryClaimRateLimitRepository) {
+    instance.clear();
+  }
 }

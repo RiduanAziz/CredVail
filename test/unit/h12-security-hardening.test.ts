@@ -24,7 +24,7 @@
  * - H12-20: Regression: Issued credentials and Merkle proofs remain cryptographically valid.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import crypto from "node:crypto";
 import { BatchProcessingService } from "@/lib/services/batch-processing-service";
@@ -41,6 +41,10 @@ import { VcService } from "@/lib/crypto/vc-service";
 import { createSessionToken } from "@/lib/auth/session";
 import { POST as claimRoute } from "@/app/api/v1/wallet/claim/route";
 import { resetClaimRateLimiter } from "@/lib/services/claim-rate-limiter";
+import {
+  ClaimRateLimitRepository,
+  InMemoryClaimRateLimitRepository,
+} from "@/lib/repositories/claim-rate-limit-repository";
 import { GET as claimExportRoute } from "@/app/api/v1/tenants/[slug]/batches/[id]/claim-export/route";
 import { GET as publicLookupRoute } from "@/app/api/v1/verify/lookup/[id]/route";
 
@@ -77,6 +81,7 @@ describe("CREDVAIL H1.2: Claim Dispatch, Atomic Redemption & Privacy Hardening",
     BatchRepository.resetInMemoryStore();
     TemplateRepository.resetInMemoryStore();
     BatchProcessingService.resetExportStore();
+    ClaimRateLimitRepository.setTestDouble(new InMemoryClaimRateLimitRepository());
     resetClaimRateLimiter();
     inMemoryTenantStore.clear();
 
@@ -1006,5 +1011,9 @@ describe("CREDVAIL H1.2: Claim Dispatch, Atomic Redemption & Privacy Hardening",
 
     const sigCheck = publicResult.checks.find((c) => c.code === "ECDSA_P256_SIGNATURE");
     expect(sigCheck?.passed).toBe(true);
+  });
+
+  afterAll(() => {
+    ClaimRateLimitRepository.resetTestDouble();
   });
 });

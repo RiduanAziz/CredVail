@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WalletService } from "@/lib/wallet/wallet-service";
 import { extractSession, AuthenticationError } from "@/lib/auth/tenant-context";
-import { checkClaimRateLimit } from "@/lib/services/claim-rate-limiter";
+import { checkClaimRateLimit, ClaimRateLimitUnavailableError } from "@/lib/services/claim-rate-limiter";
 import { ClaimError } from "@/lib/repositories/claim-invitation-repository";
 
 /**
@@ -34,17 +34,39 @@ export async function POST(request: NextRequest) {
 
     // 2. Enforce abuse protection rate limiting keyed to authenticated user
     const rateLimitKey = `user:${session.sub}`;
-    const { allowed, retryAfter } = checkClaimRateLimit(rateLimitKey);
-    if (!allowed) {
+    try {
+      const { allowed, retryAfter } = await checkClaimRateLimit(rateLimitKey);
+      if (!allowed) {
+        const retryAfterSeconds = typeof retryAfter === "number" && retryAfter > 0 ? retryAfter : 60;
+        return NextResponse.json(
+          {
+            error: "TOO_MANY_REQUESTS",
+            message: `Too many claim attempts. Please try again in ${retryAfterSeconds} seconds.`,
+            retryAfter: retryAfterSeconds,
+          },
+          {
+            status: 429,
+            headers: {
+              "Retry-After": String(retryAfterSeconds),
+              "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+              "Referrer-Policy": "no-referrer",
+            },
+          }
+        );
+      }
+    } catch (rateLimitErr: any) {
+      // Fail closed with safe HTTP 503 response. Strictly prevent leaking database diagnostics
+      // and prevent fallthrough to generic 500 or misclassification as CLAIM_TRANSACTION_BUSY.
       return NextResponse.json(
         {
-          error: "TOO_MANY_REQUESTS",
-          message: "Claim rate limit exceeded. Please wait before attempting further claims.",
+          error: "SERVICE_UNAVAILABLE",
+          code: "CLAIM_RATE_LIMIT_UNAVAILABLE",
+          message: "Claim protection is temporarily unavailable. Please retry shortly.",
         },
         {
-          status: 429,
+          status: 503,
           headers: {
-            "Retry-After": String(retryAfter || 60),
+            "Retry-After": "5",
             "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
             "Referrer-Policy": "no-referrer",
           },
@@ -111,6 +133,27 @@ export async function POST(request: NextRequest) {
       }
     );
   } catch (error: any) {
+    if (
+      error instanceof ClaimRateLimitUnavailableError ||
+      error?.code === "CLAIM_RATE_LIMIT_UNAVAILABLE"
+    ) {
+      return NextResponse.json(
+        {
+          error: "SERVICE_UNAVAILABLE",
+          code: "CLAIM_RATE_LIMIT_UNAVAILABLE",
+          message: "Claim protection is temporarily unavailable. Please retry shortly.",
+        },
+        {
+          status: 503,
+          headers: {
+            "Retry-After": "5",
+            "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+            "Referrer-Policy": "no-referrer",
+          },
+        }
+      );
+    }
+
     const msg = error.message || "Failed to claim credential.";
     let status = 500;
 

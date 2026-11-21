@@ -57,18 +57,18 @@ jobs:
         run: npx prisma db push --skip-generate
 
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
-        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts test/integration/postgres-h13-resilience.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
+        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts test/integration/postgres-h13-resilience.test.ts test/integration/postgres-claim-rate-limiter.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
 
       - name: Publish Test Execution Summary
         if: always()
         run: |
-          echo "## PostgreSQL Concurrency & Challenge Resilience CI Report" >> $GITHUB_STEP_SUMMARY
+          echo "## PostgreSQL Concurrency, Replay Resilience & Rate Limiting CI Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Workflow Result**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **PostgreSQL Engine**: \`postgres:16-alpine\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Enforcement Flag**: \`REQUIRE_POSTGRES_INTEGRATION=true\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Node.js Version**: 22" >> $GITHUB_STEP_SUMMARY
-          echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Targets**: \`test/integration/postgres-claim-concurrency.test.ts\`, \`test/integration/postgres-h13-resilience.test.ts\`, \`test/integration/postgres-claim-rate-limiter.test.ts\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ -f vitest-report.json ]; then
             PASSED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests || 0);")
@@ -81,6 +81,16 @@ jobs:
             echo "- **Failed**: $FAILED" >> $GITHUB_STEP_SUMMARY
             echo "- **Skipped**: $SKIPPED" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Strictly enforce: numTotalTests === 38, numPassedTests === 38, numFailedTests === 0, numPendingTests === 0
+            if [ "$TOTAL" -ne 38 ] || [ "$PASSED" -ne 38 ] || [ "$FAILED" -ne 0 ] || [ "$SKIPPED" -ne 0 ]; then
+              echo "❌ CI Verification Gate Failed: Expected exactly 38 passed tests with 0 failed and 0 skipped." >> $GITHUB_STEP_SUMMARY
+              echo "Got: Total=$TOTAL, Passed=$PASSED, Failed=$FAILED, Skipped=$SKIPPED"
+              exit 1
+            fi
+          else
+            echo "❌ CI Verification Gate Failed: vitest-report.json was not generated." >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
           echo "### Test Matrix & Adversarial Scenarios" >> $GITHUB_STEP_SUMMARY
           echo "#### Claim Concurrency & Integrity (PG-01 to PG-10)" >> $GITHUB_STEP_SUMMARY
@@ -104,3 +114,15 @@ jobs:
           echo "- **H131-14**: Cross-instance consumption rejection verified" >> $GITHUB_STEP_SUMMARY
           echo "- **H131-15**: Mandatory integration precondition verified (live PostgreSQL active, no in-memory fallback)" >> $GITHUB_STEP_SUMMARY
           echo "- **H131-16**: Bounded expired challenge cleanup removes expired rows while strictly preserving active challenges" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Distributed PostgreSQL Rate Limiting & Abuse Protection (PGRL-01 to PGRL-12)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-01 / PGRL-02**: 10 attempts in 60s window allowed; 11th attempt strictly rejected with HTTP 429 and Retry-After" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-03**: Window expiry resets counter and allows fresh attempt cycle" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-04**: Isolated rate-limit buckets per authenticated user" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-05**: 20 simultaneous concurrent attempts across independent application instances produce exactly 10 allowed and 10 rejected" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-06**: Multi-instance cluster sharing via PostgreSQL row-level locks without process-local state" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-07**: Zero raw user identifiers stored; only domain-separated SHA-256 pseudonymous key persisted" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-08**: Bounded stale cleanup deletes expired buckets while strictly preserving active buckets" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-09 / PGRL-10**: HTTP 429 headers and HTTP 503 fail-closed typed CLAIM_RATE_LIMIT_UNAVAILABLE verified" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-11**: X-Forwarded-For and IP spoofing cannot bypass authenticated session bucket" >> $GITHUB_STEP_SUMMARY
+          echo "- **PGRL-12**: Lock-wait boundary condition verified — client waiting on row lock captures post-lock clock_timestamp(), correctly evaluating window expiry" >> $GITHUB_STEP_SUMMARY

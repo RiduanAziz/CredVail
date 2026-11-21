@@ -293,3 +293,14 @@ model ClaimInvitation {
   @@index([recipientEmail])
   @@map("claim_invitations")
 }
+
+model ClaimRateLimitBucket {
+  keyHash   String   @id
+  count     Int
+  resetAt   DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
+  @@map("claim_rate_limit_buckets")
+}
