@@ -102,5 +102,5 @@ jobs:
           echo "- **H131-11**: Replay of consumed challenge strictly rejected" >> $GITHUB_STEP_SUMMARY
           echo "- **H131-12 / H131-13**: Concurrent consumers -> exactly 1 succeeds, others fail atomically" >> $GITHUB_STEP_SUMMARY
           echo "- **H131-14**: Cross-instance consumption rejection verified" >> $GITHUB_STEP_SUMMARY
-          echo "- **H131-15**: Fail-closed reachability verification enforced" >> $GITHUB_STEP_SUMMARY
+          echo "- **H131-15**: Mandatory integration precondition verified (live PostgreSQL active, no in-memory fallback)" >> $GITHUB_STEP_SUMMARY
           echo "- **H131-16**: Bounded expired challenge cleanup removes expired rows while strictly preserving active challenges" >> $GITHUB_STEP_SUMMARY
