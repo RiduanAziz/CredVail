@@ -11,6 +11,66 @@
 
 import { prisma } from "../db.ts";
 
+export class ClaimError extends Error {
+  readonly code: string;
+  readonly statusCode: number;
+
+  constructor(message: string, code: string, statusCode: number) {
+    super(message);
+    this.name = this.constructor.name;
+    this.code = code;
+    this.statusCode = statusCode;
+  }
+}
+
+export class ClaimInvalidError extends ClaimError {
+  constructor(message: string = "Invalid or unverified credential claim invitation token.") {
+    super(message, "CLAIM_INVALID", 404);
+  }
+}
+
+export class ClaimAlreadyConsumedError extends ClaimError {
+  constructor(message: string = "This claim invitation token has already been consumed and cannot be reused.") {
+    super(message, "CLAIM_ALREADY_CONSUMED", 410);
+  }
+}
+
+export class ClaimExpiredError extends ClaimError {
+  constructor(message: string = "This credential claim invitation has expired.") {
+    super(message, "CLAIM_EXPIRED", 410);
+  }
+}
+
+export class ClaimOwnershipError extends ClaimError {
+  constructor(message: string = "Ownership verification failed.") {
+    super(message, "CLAIM_OWNERSHIP_FAILED", 403);
+  }
+}
+
+export class ClaimEmailUnverifiedError extends ClaimError {
+  constructor(message: string = "Email verification is required to establish credential recipient ownership.") {
+    super(message, "CLAIM_EMAIL_UNVERIFIED", 403);
+  }
+}
+
+export class ClaimTransactionBusyError extends ClaimError {
+  constructor(message: string = "Transient database concurrency conflict. Please retry your request.") {
+    super(message, "CLAIM_TRANSACTION_BUSY", 503);
+  }
+}
+
+function isRetryableTransactionConflict(err: any): boolean {
+  if (!err) return false;
+  if (err.code === "P2034") return true;
+  if (typeof err.message === "string") {
+    const msg = err.message.toLowerCase();
+    if (msg.includes("40001") || msg.includes("could not serialize access")) return true;
+    if (msg.includes("40p01") || msg.includes("deadlock detected")) return true;
+    if (msg.includes("write conflict or a deadlock")) return true;
+  }
+  return false;
+}
+
 export interface StoredClaimInvitation {
   id: string;
   tokenHash: string;
@@ -179,23 +239,23 @@ export class ClaimInvitationRepository {
         }
       }
 
-      if (!targetInv || !targetKey) {
-        throw new Error("Invalid or unverified credential claim invitation token.");
+      if (!targetInv || !targetKey || targetInv.tokenHash !== tokenHash) {
+        throw new ClaimInvalidError("Invalid or unverified credential claim invitation token.");
       }
 
       // Check single-use / replay
       if (targetInv.consumedAt !== null) {
-        throw new Error("This claim invitation token has already been consumed and cannot be reused.");
+        throw new ClaimAlreadyConsumedError("This claim invitation token has already been consumed and cannot be reused.");
       }
 
       // Check expiration
       if (new Date(targetInv.expiresAt).getTime() <= Date.now()) {
-        throw new Error("This credential claim invitation has expired.");
+        throw new ClaimExpiredError("This credential claim invitation has expired.");
       }
 
-      // Check certificate match
-      if (targetInv.certificateNumber !== certificateNumber.trim()) {
-        throw new Error(`Certificate mismatch: This claim token is not valid for certificate "${certificateNumber}".`);
+      // Check certificate match and tenant match
+      if (targetInv.certificateNumber !== certificateNumber.trim() || targetInv.tenantId !== tenantId) {
+        throw new ClaimInvalidError(`Certificate mismatch: This claim token is not valid for certificate "${certificateNumber}".`);
       }
 
       // Snapshot prior to mutation for atomic transactional rollback
@@ -217,86 +277,161 @@ export class ClaimInvitationRepository {
       }
     }
 
-    try {
-      return await prisma.$transaction(
-        async (tx) => {
-          // 1. Database-level atomic conditional update
-          // Matches ONLY if consumedAt IS NULL and expiresAt > NOW
-          const updateResult = await tx.claimInvitation.updateMany({
-            where: {
-              id: invitationId,
-              consumedAt: null,
-              expiresAt: { gt: consumedAt },
-            },
-            data: {
-              consumedAt,
-              claimedByUserId: userId,
-              claimedByHolderDid: holderDid || null,
-            },
-          });
+    // Bounded whole-transaction retry loop for transient PostgreSQL serialization/deadlock conflicts
+    const maxAttempts = 3;
+    let attempt = 0;
 
-          if (updateResult.count === 0) {
-            throw new Error("This claim invitation token has already been consumed and cannot be reused.");
-          }
-
-          // 2. Verify and associate credential within the same transaction
-          const credRecord = await tx.credentialRecord.findUnique({
-            where: { certificateNumber: certificateNumber.trim() },
-          });
-          if (!credRecord) {
-            throw new Error(`Credential record for certificate "${certificateNumber}" not found.`);
-          }
-
-          // 3. Record audit log entry within the same transaction
-          await tx.auditLog.create({
-            data: {
-              tenantId,
-              userId,
-              action: "CREDENTIAL_CLAIMED",
-              resourceType: "CredentialRecord",
-              resourceId: credRecord.id,
-              metadata: {
-                certificateNumber,
-                invitationId,
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        return await prisma.$transaction(
+          async (tx) => {
+            // 1. Database-level atomic conditional update binding all security-critical predicates:
+            // - invitation ID
+            // - token hash
+            // - tenant ID
+            // - certificate number
+            // - unconsumed (consumedAt IS NULL)
+            // - unexpired (expiresAt > consumedAt)
+            const updateResult = await tx.claimInvitation.updateMany({
+              where: {
+                id: invitationId,
+                tokenHash,
+                tenantId,
+                certificateNumber: certificateNumber.trim(),
+                consumedAt: null,
+                expiresAt: { gt: consumedAt },
+              },
+              data: {
+                consumedAt,
+                claimedByUserId: userId,
                 claimedByHolderDid: holderDid || null,
               },
-              ipHash: "claim-transaction",
-            },
-          });
+            });
 
-          // 4. Downstream association hook
-          if (onPostConsume) {
-            await onPostConsume(tx);
+            if (updateResult.count === 0) {
+              // Inspect database within the same transaction to determine exact rejection reason
+              const currentInv = await tx.claimInvitation.findUnique({
+                where: { id: invitationId },
+              });
+
+              if (!currentInv || currentInv.tokenHash !== tokenHash) {
+                throw new ClaimInvalidError("Invalid or unverified credential claim invitation token.");
+              }
+              if (currentInv.tenantId !== tenantId || currentInv.certificateNumber !== certificateNumber.trim()) {
+                throw new ClaimInvalidError(
+                  `Certificate mismatch: This claim token is not valid for certificate "${certificateNumber}".`
+                );
+              }
+              if (currentInv.consumedAt !== null) {
+                throw new ClaimAlreadyConsumedError(
+                  "This claim invitation token has already been consumed and cannot be reused."
+                );
+              }
+              if (new Date(currentInv.expiresAt).getTime() <= consumedAt.getTime()) {
+                throw new ClaimExpiredError("This credential claim invitation has expired.");
+              }
+
+              throw new ClaimAlreadyConsumedError(
+                "This claim invitation token has already been consumed and cannot be reused."
+              );
+            }
+
+            // 2. Verify and associate credential within the same transaction client
+            const credRecord = await tx.credentialRecord.findUnique({
+              where: { certificateNumber: certificateNumber.trim() },
+            });
+            if (!credRecord) {
+              throw new ClaimInvalidError(`Credential record for certificate "${certificateNumber}" not found.`);
+            }
+            if (credRecord.tenantId !== tenantId) {
+              throw new ClaimOwnershipError(
+                `Cross-tenant security violation: Credential does not belong to tenant "${tenantId}".`
+              );
+            }
+
+            // 3. Load updated invitation inside transaction
+            const updated = await tx.claimInvitation.findUnique({
+              where: { id: invitationId },
+            });
+            if (!updated) {
+              throw new ClaimInvalidError("Failed to load consumed claim invitation.");
+            }
+            if (credRecord.credentialId !== updated.credentialId) {
+              throw new ClaimInvalidError(
+                `Credential ID mismatch: Expected "${updated.credentialId}", found "${credRecord.credentialId}".`
+              );
+            }
+
+            // 4. Record audit log entry within the same transaction client
+            await tx.auditLog.create({
+              data: {
+                tenantId,
+                userId,
+                action: "CREDENTIAL_CLAIMED",
+                resourceType: "CredentialRecord",
+                resourceId: credRecord.id,
+                metadata: {
+                  certificateNumber,
+                  invitationId,
+                  claimedByHolderDid: holderDid || null,
+                },
+                ipHash: "claim-transaction",
+              },
+            });
+
+            // 5. Downstream association hook inside transaction client
+            if (onPostConsume) {
+              await onPostConsume(tx);
+            }
+
+            return {
+              id: updated.id,
+              tokenHash: updated.tokenHash,
+              credentialId: updated.credentialId,
+              certificateNumber: updated.certificateNumber,
+              recipientEmail: updated.recipientEmail,
+              tenantId: updated.tenantId,
+              expiresAt: updated.expiresAt,
+              consumedAt: updated.consumedAt,
+              claimedByUserId: updated.claimedByUserId,
+              claimedByHolderDid: updated.claimedByHolderDid,
+              createdAt: updated.createdAt,
+            };
+          },
+          {
+            isolationLevel: "RepeatableRead" as any,
           }
-
-          const updated = await tx.claimInvitation.findUnique({
-            where: { id: invitationId },
-          });
-          if (!updated) {
-            throw new Error("Failed to load consumed claim invitation.");
-          }
-
-          return {
-            id: updated.id,
-            tokenHash: updated.tokenHash,
-            credentialId: updated.credentialId,
-            certificateNumber: updated.certificateNumber,
-            recipientEmail: updated.recipientEmail,
-            tenantId: updated.tenantId,
-            expiresAt: updated.expiresAt,
-            consumedAt: updated.consumedAt,
-            claimedByUserId: updated.claimedByUserId,
-            claimedByHolderDid: updated.claimedByHolderDid,
-            createdAt: updated.createdAt,
-          };
-        },
-        {
-          isolationLevel: "RepeatableRead" as any,
+        );
+      } catch (err: any) {
+        // Immediate rethrow for typed domain errors and non-retryable application errors
+        if (err instanceof ClaimError) {
+          throw err;
         }
-      );
-    } catch (err) {
-      throw err;
+
+        const isRetryable = isRetryableTransactionConflict(err);
+        if (isRetryable && attempt < maxAttempts) {
+          // Restart fresh whole transaction after small jittered backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, 10 * attempt + Math.floor(Math.random() * 20))
+          );
+          continue;
+        }
+
+        if (isRetryable && attempt >= maxAttempts) {
+          // Bounded retries exhausted
+          throw new ClaimTransactionBusyError(
+            "Transient database concurrency conflict. Please retry your request."
+          );
+        }
+
+        throw err;
+      }
     }
+
+    throw new ClaimTransactionBusyError(
+      "Transient database concurrency conflict. Please retry your request."
+    );
   }
 
   /**

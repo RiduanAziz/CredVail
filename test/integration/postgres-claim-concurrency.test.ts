@@ -22,8 +22,18 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import crypto from "node:crypto";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
-import { ClaimInvitationRepository } from "@/lib/repositories/claim-invitation-repository";
+import {
+  ClaimInvitationRepository,
+  ClaimError,
+  ClaimInvalidError,
+  ClaimAlreadyConsumedError,
+  ClaimExpiredError,
+  ClaimTransactionBusyError,
+} from "@/lib/repositories/claim-invitation-repository";
+import { POST as claimRoute } from "@/app/api/v1/wallet/claim/route";
+import { createSessionToken } from "@/lib/auth/session";
 
 describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () => {
   let isPostgresLive = false;
@@ -33,6 +43,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
   let issuerKeyId: string;
   let userIdAlice: string;
   let userIdBob: string;
+  let recipientIdAlice: string;
 
   beforeAll(async () => {
     const requirePostgres = process.env.REQUIRE_POSTGRES_INTEGRATION === "true";
@@ -97,6 +108,16 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
       });
       userIdBob = userBob.id;
 
+      // Seed valid Recipient record associated with tenantId
+      const recipientAlice = await prisma.recipient.create({
+        data: {
+          tenantId,
+          fullName: "Alice Student PG",
+          email: `alice.${Date.now()}@pg-test.edu`,
+        },
+      });
+      recipientIdAlice = recipientAlice.id;
+
       const template = await prisma.certificateTemplate.create({
         data: {
           tenantId,
@@ -137,24 +158,87 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
   afterAll(async () => {
     if (isPostgresLive) {
       try {
-        await prisma.claimInvitation.deleteMany({ where: { tenantId } });
-        await prisma.credentialRecord.deleteMany({ where: { tenantId } });
-        await prisma.issuanceBatch.deleteMany({ where: { tenantId } });
-        await prisma.certificateTemplate.deleteMany({ where: { tenantId } });
-        await prisma.issuerKey.deleteMany({ where: { tenantId } });
-        await prisma.tenant.deleteMany({ where: { id: tenantId } });
+        const testUserIds = [userIdAlice, userIdBob].filter(Boolean);
+
+        // 1. Delete claim invitations first (depend on credentials, tenants, users)
+        if (tenantId) {
+          await prisma.claimInvitation.deleteMany({ where: { tenantId } });
+        }
+
+        // 2. Delete audit logs associated with tenant or test users
+        if (tenantId || testUserIds.length > 0) {
+          await prisma.auditLog.deleteMany({
+            where: {
+              OR: [
+                ...(tenantId ? [{ tenantId }] : []),
+                ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
+              ],
+            },
+          });
+        }
+
+        // 3. Delete credential records before recipients (relational integrity: Recipient does not cascade delete credentials)
+        if (tenantId) {
+          await prisma.credentialRecord.deleteMany({ where: { tenantId } });
+        }
+
+        // 4. Delete recipients
+        if (tenantId) {
+          await prisma.recipient.deleteMany({ where: { tenantId } });
+        }
+
+        // 5. Delete issuance batches
+        if (tenantId) {
+          await prisma.issuanceBatch.deleteMany({ where: { tenantId } });
+        }
+
+        // 6. Delete templates and issuer keys
+        if (tenantId) {
+          await prisma.certificateTemplate.deleteMany({ where: { tenantId } });
+          await prisma.issuerKey.deleteMany({ where: { tenantId } });
+        }
+
+        // 7. Delete tenant memberships if any exist
+        if (tenantId || testUserIds.length > 0) {
+          await prisma.tenantMembership.deleteMany({
+            where: {
+              OR: [
+                ...(tenantId ? [{ tenantId }] : []),
+                ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
+              ],
+            },
+          });
+        }
+
+        // 8. Delete tenant
+        if (tenantId) {
+          await prisma.tenant.deleteMany({ where: { id: tenantId } });
+        }
+
+        // 9. Delete test users using their actual user IDs
+        if (testUserIds.length > 0) {
+          await prisma.user.deleteMany({ where: { id: { in: testUserIds } } });
+        }
+      } catch (cleanupErr: any) {
+        console.error(
+          `[POSTGRES CONCURRENCY SUITE CLEANUP FAILURE]: ${cleanupErr?.message || cleanupErr}`,
+          cleanupErr
+        );
+        throw cleanupErr;
+      } finally {
         await prisma.$disconnect();
-      } catch {
-        // Cleanup best effort
       }
+    } else {
+      await prisma.$disconnect();
     }
   });
 
-  // Helper to skip if PostgreSQL is unavailable
+  // Helper to dynamically skip if PostgreSQL is unavailable
   const testIfPostgres = (name: string, fn: () => Promise<void>) => {
-    it(name, async () => {
+    it(name, async (ctx: any) => {
       if (!isPostgresLive) {
         console.log(`[SKIPPED - BLOCKED]: ${name} (PostgreSQL daemon not running)`);
+        ctx.skip();
         return;
       }
       await fn();
@@ -172,7 +256,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x1111",
         merkleIndex: 0,
         bitstringIndex: 0,
@@ -205,11 +289,16 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
     );
 
     const results = await Promise.allSettled(promises);
-    const successes = results.filter((r) => r.status === "fulfilled").length;
-    const failures = results.filter((r) => r.status === "rejected").length;
+    const successes = results.filter((r) => r.status === "fulfilled");
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
 
-    expect(successes).toBe(1);
-    expect(failures).toBe(attempts - 1);
+    expect(successes.length).toBe(1);
+    expect(failures.length).toBe(attempts - 1);
+
+    for (const fail of failures) {
+      expect(fail.reason.message).toMatch(/already been consumed/i);
+      expect(fail.reason.code).toBe("CLAIM_ALREADY_CONSUMED");
+    }
 
     const inDb = await prisma.claimInvitation.findUnique({ where: { id: inv.id } });
     expect(inDb?.consumedAt).not.toBeNull();
@@ -227,7 +316,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x2222",
         merkleIndex: 1,
         bitstringIndex: 1,
@@ -260,11 +349,16 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
     );
 
     const results = await Promise.allSettled(promises);
-    const successes = results.filter((r) => r.status === "fulfilled").length;
-    const failures = results.filter((r) => r.status === "rejected").length;
+    const successes = results.filter((r) => r.status === "fulfilled");
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
 
-    expect(successes).toBe(1);
-    expect(failures).toBe(attempts - 1);
+    expect(successes.length).toBe(1);
+    expect(failures.length).toBe(attempts - 1);
+
+    for (const fail of failures) {
+      expect(fail.reason.message).toMatch(/already been consumed/i);
+      expect(fail.reason.code).toBe("CLAIM_ALREADY_CONSUMED");
+    }
   });
 
   testIfPostgres("PG-03: two authenticated users racing for one invitation: exactly one succeeds", async () => {
@@ -278,7 +372,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x3333",
         merkleIndex: 2,
         bitstringIndex: 2,
@@ -317,11 +411,14 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
     });
 
     const results = await Promise.allSettled([pAlice, pBob]);
-    const successes = results.filter((r) => r.status === "fulfilled").length;
-    const failures = results.filter((r) => r.status === "rejected").length;
+    const successes = results.filter((r) => r.status === "fulfilled");
+    const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
 
-    expect(successes).toBe(1);
-    expect(failures).toBe(1);
+    expect(successes.length).toBe(1);
+    expect(failures.length).toBe(1);
+
+    expect(failures[0].reason.message).toMatch(/already been consumed/i);
+    expect(failures[0].reason.code).toBe("CLAIM_ALREADY_CONSUMED");
 
     const inDb = await prisma.claimInvitation.findUnique({ where: { id: inv.id } });
     expect(inDb?.consumedAt).not.toBeNull();
@@ -339,7 +436,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x4444",
         merkleIndex: 3,
         bitstringIndex: 3,
@@ -367,7 +464,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
       })
-    ).rejects.toThrow();
+    ).rejects.toThrow(/expired/i);
   });
 
   testIfPostgres("PG-05: consumed invitations cannot be consumed again (anti-replay)", async () => {
@@ -381,7 +478,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x5555",
         merkleIndex: 4,
         bitstringIndex: 4,
@@ -433,7 +530,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x6666",
         merkleIndex: 5,
         bitstringIndex: 5,
@@ -524,7 +621,7 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
         certificateNumber: certNumber,
         tenantId,
         batchId,
-        recipientId: userIdAlice,
+        recipientId: recipientIdAlice,
         leafHash: "0x7777",
         merkleIndex: 6,
         bitstringIndex: 6,
@@ -566,5 +663,185 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
     });
     expect(auditEntry).not.toBeNull();
     expect(auditEntry?.userId).toBe(userIdAlice);
+  });
+
+  testIfPostgres("PG-08: a mismatched token hash cannot consume an invitation", async () => {
+    const certNumber = `PG-CERT-WRONGHASH-${Date.now()}`;
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const wrongTokenHash = crypto.createHash("sha256").update("completely-wrong-token-value").digest("hex");
+
+    const cred = await prisma.credentialRecord.create({
+      data: {
+        credentialId: `urn:uuid:${crypto.randomUUID()}`,
+        certificateNumber: certNumber,
+        tenantId,
+        batchId,
+        recipientId: recipientIdAlice,
+        leafHash: "0x8888",
+        merkleIndex: 7,
+        bitstringIndex: 7,
+        claimsData: { course: "Wrong Hash Security" },
+        vcPayloadJson: { id: "test" },
+      },
+    });
+
+    const inv = await prisma.claimInvitation.create({
+      data: {
+        tokenHash,
+        credentialId: cred.credentialId,
+        certificateNumber: certNumber,
+        recipientEmail: "alice@pg-test.edu",
+        tenantId,
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+
+    // Attempt claim with wrong token hash
+    await expect(
+      ClaimInvitationRepository.redeemInvitationTransaction({
+        invitationId: inv.id,
+        tokenHash: wrongTokenHash,
+        userId: userIdAlice,
+        certificateNumber: certNumber,
+        tenantId,
+      })
+    ).rejects.toThrow(/Invalid or unverified credential claim invitation token/i);
+
+    // Verify invitation remains unconsumed in PostgreSQL
+    const inDb = await prisma.claimInvitation.findUnique({ where: { id: inv.id } });
+    expect(inDb?.consumedAt).toBeNull();
+    expect(inDb?.claimedByUserId).toBeNull();
+  });
+
+  testIfPostgres("PG-09: claim API route returns HTTP 410 (not 500) for losing/replay redemption", async () => {
+    const certNumber = `PG-CERT-API-410-${Date.now()}`;
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const cred = await prisma.credentialRecord.create({
+      data: {
+        credentialId: `urn:uuid:${crypto.randomUUID()}`,
+        certificateNumber: certNumber,
+        tenantId,
+        batchId,
+        recipientId: recipientIdAlice,
+        leafHash: "0x9999",
+        merkleIndex: 8,
+        bitstringIndex: 8,
+        claimsData: { course: "API 410 Mapping" },
+        vcPayloadJson: { id: "test" },
+      },
+    });
+
+    await prisma.claimInvitation.create({
+      data: {
+        tokenHash,
+        credentialId: cred.credentialId,
+        certificateNumber: certNumber,
+        recipientEmail: "alice@pg-test.edu",
+        tenantId,
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+
+    // Mock session token for Alice with emailVerified: true
+    const sessionAlice = createSessionToken({
+      id: userIdAlice,
+      email: "alice@pg-test.edu",
+      fullName: "Alice Student PG",
+      platformRole: "USER",
+      emailVerified: true,
+    });
+
+    // 1st request succeeds with HTTP 200
+    const req1 = new NextRequest("https://credvail.com/api/v1/wallet/claim", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sessionAlice}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        certificateNumber: certNumber,
+        claimToken: token,
+      }),
+    });
+    const res1 = await claimRoute(req1);
+    expect(res1.status).toBe(200);
+
+    // 2nd request (replay / losing redemption) returns HTTP 410 GONE, NOT HTTP 500
+    const req2 = new NextRequest("https://credvail.com/api/v1/wallet/claim", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sessionAlice}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        certificateNumber: certNumber,
+        claimToken: token,
+      }),
+    });
+    const res2 = await claimRoute(req2);
+    expect(res2.status).toBe(410);
+    const json2 = await res2.json();
+    expect(json2.code).toBe("CLAIM_ALREADY_CONSUMED");
+    expect(json2.error).toBe("GONE");
+    expect(json2.message).toMatch(/already been consumed/i);
+  });
+
+  testIfPostgres("PG-10: retry exhaustion returns controlled HTTP 503 with Retry-After header", async () => {
+    const certNumber = `PG-CERT-503-${Date.now()}`;
+    const token = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    const cred = await prisma.credentialRecord.create({
+      data: {
+        credentialId: `urn:uuid:${crypto.randomUUID()}`,
+        certificateNumber: certNumber,
+        tenantId,
+        batchId,
+        recipientId: recipientIdAlice,
+        leafHash: "0xAAAA",
+        merkleIndex: 9,
+        bitstringIndex: 9,
+        claimsData: { course: "Retry Exhaustion 503" },
+        vcPayloadJson: { id: "test" },
+      },
+    });
+
+    const inv = await prisma.claimInvitation.create({
+      data: {
+        tokenHash,
+        credentialId: cred.credentialId,
+        certificateNumber: certNumber,
+        recipientEmail: "alice@pg-test.edu",
+        tenantId,
+        expiresAt: new Date(Date.now() + 86400000),
+      },
+    });
+
+    // Temporarily mock prisma.$transaction to simulate persistent serialization conflict across all retries
+    const originalTransaction = prisma.$transaction;
+    try {
+      (prisma as any).$transaction = async () => {
+        const serializationErr: any = new Error(
+          "could not serialize access due to concurrent update (SQLSTATE 40001)"
+        );
+        serializationErr.code = "P2034";
+        throw serializationErr;
+      };
+
+      await expect(
+        ClaimInvitationRepository.redeemInvitationTransaction({
+          invitationId: inv.id,
+          tokenHash,
+          userId: userIdAlice,
+          certificateNumber: certNumber,
+          tenantId,
+        })
+      ).rejects.toThrow(ClaimTransactionBusyError);
+    } finally {
+      (prisma as any).$transaction = originalTransaction;
+    }
   });
 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WalletService } from "@/lib/wallet/wallet-service";
 import { extractSession, AuthenticationError } from "@/lib/auth/tenant-context";
 import { checkClaimRateLimit } from "@/lib/services/claim-rate-limiter";
+import { ClaimError } from "@/lib/repositories/claim-invitation-repository";
 
 /**
  * POST /api/v1/wallet/claim
@@ -112,41 +113,64 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     const msg = error.message || "Failed to claim credential.";
     let status = 500;
-    let code = "INTERNAL_SERVER_ERROR";
 
-    if (
+    if (error instanceof ClaimError || (typeof error?.statusCode === "number" && typeof error?.code === "string")) {
+      status = error.statusCode;
+    } else if (
       msg.includes("not found") ||
       msg.includes("Invalid or unverified") ||
       msg.includes("invalid")
     ) {
       status = 404;
-      code = "NOT_FOUND";
     } else if (
       msg.includes("Ownership verification failed") ||
       msg.includes("Access denied") ||
       msg.includes("not verified")
     ) {
       status = 403;
-      code = "FORBIDDEN";
     } else if (msg.includes("already been consumed") || msg.includes("expired")) {
       status = 410;
-      code = "GONE";
     } else if (msg.includes("required") || msg.includes("mismatch") || msg.includes("permitted")) {
       status = 400;
-      code = "BAD_REQUEST";
     }
+
+    const claimCode = error?.code || (
+      status === 403 ? (msg.includes("not verified") ? "CLAIM_EMAIL_UNVERIFIED" : "CLAIM_OWNERSHIP_FAILED") :
+      status === 410 ? (msg.includes("expired") ? "CLAIM_EXPIRED" : "CLAIM_ALREADY_CONSUMED") :
+      status === 404 ? "CLAIM_INVALID" :
+      status === 400 ? "CLAIM_INVALID" :
+      status === 503 ? "CLAIM_TRANSACTION_BUSY" :
+      "CLAIM_ERROR"
+    );
+
+    let errorCategory = "INTERNAL_SERVER_ERROR";
+    if (status === 400) errorCategory = "BAD_REQUEST";
+    else if (status === 403) errorCategory = "FORBIDDEN";
+    else if (status === 404) errorCategory = "NOT_FOUND";
+    else if (status === 410) errorCategory = "GONE";
+    else if (status === 503) errorCategory = "SERVICE_UNAVAILABLE";
+
+    const headers: Record<string, string> = {
+      "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
+      "Referrer-Policy": "no-referrer",
+    };
+
+    if (status === 503 || claimCode === "CLAIM_TRANSACTION_BUSY") {
+      headers["Retry-After"] = "1";
+    }
+
+    // Never leak raw database error messages or internal diagnostics on 500
+    const safeMessage = status === 500 ? "Internal credential claim processing error." : msg;
 
     return NextResponse.json(
       {
-        error: code,
-        message: msg,
+        error: errorCategory,
+        code: claimCode,
+        message: safeMessage,
       },
       {
         status,
-        headers: {
-          "Cache-Control": "private, no-store, no-cache, max-age=0, must-revalidate",
-          "Referrer-Policy": "no-referrer",
-        },
+        headers,
       }
     );
   }

@@ -57,24 +57,39 @@ jobs:
         run: npx prisma db push --skip-generate
 
       - name: Execute Live PostgreSQL Concurrency & Transaction Integrity Tests
-        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts --reporter=verbose
+        run: npx vitest run test/integration/postgres-claim-concurrency.test.ts --reporter=verbose --reporter=json --outputFile=vitest-report.json
 
       - name: Publish Test Execution Summary
         if: always()
         run: |
           echo "## PostgreSQL Concurrency & Transaction Integrity CI Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Workflow Result**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
           echo "- **PostgreSQL Engine**: \`postgres:16-alpine\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Enforcement Flag**: \`REQUIRE_POSTGRES_INTEGRATION=true\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Node.js Version**: 22" >> $GITHUB_STEP_SUMMARY
           echo "- **Test Target**: \`test/integration/postgres-claim-concurrency.test.ts\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f vitest-report.json ]; then
+            PASSED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPassedTests || 0);")
+            FAILED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numFailedTests || 0);")
+            SKIPPED=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numPendingTests || 0);")
+            TOTAL=$(node -e "const r = JSON.parse(require('fs').readFileSync('vitest-report.json')); console.log(r.numTotalTests || 0);")
+            echo "### Dynamic Test Execution Metrics" >> $GITHUB_STEP_SUMMARY
+            echo "- **Total Tests**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+            echo "- **Passed**: $PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Failed**: $FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "- **Skipped**: $SKIPPED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "### Test Matrix & Adversarial Scenarios" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-01**: 5 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 4 fail" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-02**: 10 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 9 fail" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-03**: 2 authenticated users racing for 1 invitation -> exactly 1 succeeds, 1 fails" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-04**: Expired invitation consumption -> strictly rejected (fails closed)" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-05**: Replay of consumed invitation -> strictly rejected (410 / anti-replay)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-01**: 5 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 4 fail with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-02**: 10 concurrent simultaneous claims for 1 invitation -> exactly 1 succeeds, 9 fail with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-03**: 2 authenticated users racing for 1 invitation -> exactly 1 succeeds, 1 fails with typed CLAIM_ALREADY_CONSUMED" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-04**: Expired invitation consumption -> strictly rejected with typed CLAIM_EXPIRED (fails closed)" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-05**: Replay of consumed invitation -> strictly rejected with typed CLAIM_ALREADY_CONSUMED (HTTP 410 / anti-replay)" >> $GITHUB_STEP_SUMMARY
           echo "- **PG-06**: Downstream association failure -> full atomic rollback verified, zero audit logs committed, retry succeeds" >> $GITHUB_STEP_SUMMARY
-          echo "- **PG-07**: Successful claim -> atomic association with user, holder DID, and audit log" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-07**: Successful claim -> atomic association with recipient, user, holder DID, and audit log" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-08**: Mismatched token hash -> rejected with typed CLAIM_INVALID; invitation remains unconsumed" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-09**: Claim API route integration -> losing/replay redemption returns HTTP 410 GONE, never HTTP 500" >> $GITHUB_STEP_SUMMARY
+          echo "- **PG-10**: Retry exhaustion -> bounded conflict exhaustion returns controlled HTTP 503 with Retry-After header" >> $GITHUB_STEP_SUMMARY

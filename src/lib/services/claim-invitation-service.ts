@@ -15,7 +15,24 @@ import crypto from "node:crypto";
 import {
   ClaimInvitationRepository,
   type StoredClaimInvitation,
+  ClaimError,
+  ClaimInvalidError,
+  ClaimAlreadyConsumedError,
+  ClaimExpiredError,
+  ClaimOwnershipError,
+  ClaimEmailUnverifiedError,
+  ClaimTransactionBusyError,
 } from "../repositories/claim-invitation-repository.ts";
+
+export {
+  ClaimError,
+  ClaimInvalidError,
+  ClaimAlreadyConsumedError,
+  ClaimExpiredError,
+  ClaimOwnershipError,
+  ClaimEmailUnverifiedError,
+  ClaimTransactionBusyError,
+};
 
 export interface GenerateInvitationInput {
   credentialId: string;
@@ -87,36 +104,36 @@ export class ClaimInvitationService {
     const { certificateNumber, claimToken, userEmail, userId, holderDid } = input;
 
     if (!claimToken || typeof claimToken !== "string" || claimToken.trim().length === 0) {
-      throw new Error("A valid high-entropy claim token is required.");
+      throw new ClaimInvalidError("A valid high-entropy claim token is required.");
     }
 
     const tokenHash = this.hashToken(claimToken);
     const invitation = await ClaimInvitationRepository.findByTokenHash(tokenHash);
 
     if (!invitation) {
-      throw new Error("Invalid or unverified credential claim invitation token.");
+      throw new ClaimInvalidError("Invalid or unverified credential claim invitation token.");
     }
 
     // 1. Check certificate number match
     if (invitation.certificateNumber !== certificateNumber.trim()) {
-      throw new Error(
+      throw new ClaimInvalidError(
         `Certificate mismatch: This claim token is not valid for certificate "${certificateNumber}".`
       );
     }
 
     // 2. Check replay / already consumed
     if (invitation.consumedAt !== null) {
-      throw new Error("This claim invitation token has already been consumed and cannot be reused.");
+      throw new ClaimAlreadyConsumedError("This claim invitation token has already been consumed and cannot be reused.");
     }
 
     // 3. Check expiration
     if (new Date(invitation.expiresAt).getTime() <= Date.now()) {
-      throw new Error("This credential claim invitation has expired.");
+      throw new ClaimExpiredError("This credential claim invitation has expired.");
     }
 
     // 4. Check recipient identity binding (case-insensitive email match)
     if (invitation.recipientEmail.toLowerCase() !== userEmail.trim().toLowerCase()) {
-      throw new Error(
+      throw new ClaimOwnershipError(
         `Ownership verification failed: You are signed in as "${userEmail}", but this credential was issued to "${invitation.recipientEmail}".`
       );
     }
@@ -125,7 +142,7 @@ export class ClaimInvitationService {
     // ONLY explicit boolean `true` permits a recipient-bound claim.
     // `false`, `undefined`, `null`, or any other falsy/truthy value is strictly rejected.
     if (input.userEmailVerified !== true) {
-      throw new Error(
+      throw new ClaimEmailUnverifiedError(
         `Account email "${userEmail}" is not verified. Email verification is required to establish credential recipient ownership.`
       );
     }
