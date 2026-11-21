@@ -161,54 +161,64 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           AND "claimedByUserId" IS NOT NULL;
       `);
 
-      // 1b. Ensure ownership monotonicity trigger exists in PostgreSQL test container
+      // 1b. Ensure ownership monotonicity & paired-state function exists (single command)
       await prisma.$executeRawUnsafe(`
         CREATE OR REPLACE FUNCTION trg_enforce_claim_invitation_monotonicity()
         RETURNS TRIGGER AS $$
         BEGIN
-          IF OLD."credentialId" IS DISTINCT FROM NEW."credentialId" THEN
-            RAISE EXCEPTION 'claim_invitations ownership violation: credentialId is immutable once created (attempted to change % to %)',
-              OLD."credentialId", NEW."credentialId"
+          -- Invariant 0: Paired ownership-state invariant (both NULL or both NOT NULL)
+          IF (NEW."consumedAt" IS NULL) IS DISTINCT FROM (NEW."claimedByUserId" IS NULL) THEN
+            RAISE EXCEPTION 'claim_invitations ownership state violation: consumedAt and claimedByUserId must both be NULL or both be NOT NULL (paired ownership state)'
               USING ERRCODE = '23514';
           END IF;
 
-          IF OLD."consumedAt" IS NOT NULL THEN
-            IF NEW."consumedAt" IS NULL THEN
-              RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt cannot be reset to NULL once consumed'
+          -- The following immutability rules apply only to UPDATE operations (never access OLD on INSERT)
+          IF TG_OP = 'UPDATE' THEN
+            IF OLD."credentialId" IS DISTINCT FROM NEW."credentialId" THEN
+              RAISE EXCEPTION 'claim_invitations ownership violation: credentialId is immutable once created (attempted to change % to %)',
+                OLD."credentialId", NEW."credentialId"
                 USING ERRCODE = '23514';
             END IF;
-            IF OLD."consumedAt" IS DISTINCT FROM NEW."consumedAt" THEN
-              RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt is immutable once set (attempted to change % to %)',
-                OLD."consumedAt", NEW."consumedAt"
-                USING ERRCODE = '23514';
-            END IF;
-          END IF;
 
-          IF OLD."claimedByUserId" IS NOT NULL THEN
-            IF NEW."claimedByUserId" IS NULL THEN
-              RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId cannot be cleared once assigned'
-                USING ERRCODE = '23514';
+            IF OLD."consumedAt" IS NOT NULL THEN
+              IF NEW."consumedAt" IS NULL THEN
+                RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt cannot be reset to NULL once consumed'
+                  USING ERRCODE = '23514';
+              END IF;
+              IF OLD."consumedAt" IS DISTINCT FROM NEW."consumedAt" THEN
+                RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt is immutable once set (attempted to change % to %)',
+                  OLD."consumedAt", NEW."consumedAt"
+                  USING ERRCODE = '23514';
+              END IF;
             END IF;
-            IF OLD."claimedByUserId" IS DISTINCT FROM NEW."claimedByUserId" THEN
-              RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId is immutable once assigned (attempted to change % to %)',
-                OLD."claimedByUserId", NEW."claimedByUserId"
-                USING ERRCODE = '23514';
-            END IF;
-          END IF;
 
-          IF OLD."consumedAt" IS NULL AND NEW."consumedAt" IS NOT NULL AND NEW."claimedByUserId" IS NULL THEN
-            RAISE EXCEPTION 'claim_invitations ownership violation: cannot set consumedAt without assigning claimedByUserId'
-              USING ERRCODE = '23514';
+            IF OLD."claimedByUserId" IS NOT NULL THEN
+              IF NEW."claimedByUserId" IS NULL THEN
+                RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId cannot be cleared once assigned'
+                  USING ERRCODE = '23514';
+              END IF;
+              IF OLD."claimedByUserId" IS DISTINCT FROM NEW."claimedByUserId" THEN
+                RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId is immutable once assigned (attempted to change % to %)',
+                  OLD."claimedByUserId", NEW."claimedByUserId"
+                  USING ERRCODE = '23514';
+              END IF;
+            END IF;
           END IF;
 
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
+      `);
 
+      // 1c. Ensure trigger is dropped before recreate (separate single command)
+      await prisma.$executeRawUnsafe(`
         DROP TRIGGER IF EXISTS trg_claim_invitation_monotonicity ON "claim_invitations";
+      `);
 
+      // 1d. Ensure trigger is created on INSERT OR UPDATE (separate single command)
+      await prisma.$executeRawUnsafe(`
         CREATE TRIGGER trg_claim_invitation_monotonicity
-        BEFORE UPDATE ON "claim_invitations"
+        BEFORE INSERT OR UPDATE ON "claim_invitations"
         FOR EACH ROW
         EXECUTE FUNCTION trg_enforce_claim_invitation_monotonicity();
       `);
@@ -258,6 +268,31 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         throw new Error(
           `H1.3.3.1 index verification failed: predicate does not exactly match expected invariant (expected: "consumedat is not null and claimedbyuserid is not null", got: "${predNorm}")`
         );
+      }
+
+      // 3. Verify ownership monotonicity trigger exists, is enabled, and fires BEFORE INSERT OR UPDATE
+      const triggerCheck = await prisma.$queryRaw<any[]>`
+        SELECT t.tgenabled, t.tgtype, p.proname
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_proc p ON p.oid = t.tgfoid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE t.tgname = 'trg_claim_invitation_monotonicity'
+          AND c.relname = 'claim_invitations'
+          AND n.nspname = 'public';
+      `;
+      if (!triggerCheck || triggerCheck.length === 0) {
+        throw new Error("H1.3.3.1 trigger verification failed: trigger not found in schema public");
+      }
+      if (triggerCheck[0].tgenabled !== "O") {
+        throw new Error(`H1.3.3.1 trigger verification failed: trigger not enabled (${triggerCheck[0].tgenabled})`);
+      }
+      if (triggerCheck[0].proname !== "trg_enforce_claim_invitation_monotonicity") {
+        throw new Error(`H1.3.3.1 trigger verification failed: proc is ${triggerCheck[0].proname}`);
+      }
+      const tgtype = Number(triggerCheck[0].tgtype);
+      if ((tgtype & 1) === 0 || (tgtype & 2) === 0 || (tgtype & 4) === 0 || (tgtype & 16) === 0) {
+        throw new Error(`H1.3.3.1 trigger verification failed: trigger flags mismatch (tgtype = ${tgtype})`);
       }
 
       const nowTs = Date.now();
@@ -1194,7 +1229,83 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     expect(alterCredentialIdError).toBeDefined();
     expect(String(alterCredentialIdError.message || alterCredentialIdError)).toMatch(/monotonicity|ownership violation|credentialId is immutable|23514/i);
 
-    // 5. Verify the winner's ownership record remains intact in PostgreSQL after all rejected mutations
+    // 5. Verify Ownership-State Paired Invariant on INSERT and UPDATE
+    // 5a. Direct INSERT with claimedByUserId set but consumedAt null must be rejected (SQLSTATE 23514)
+    let invalidInsertClaimantOnlyError: any = null;
+    try {
+      await prisma.claimInvitation.create({
+        data: {
+          tokenHash: crypto.createHash("sha256").update(`inv_ins_claimant_${nowTs}`).digest("hex"),
+          credentialId: `urn:uuid:${crypto.randomUUID()}`,
+          certificateNumber: `INVALID-INS-CLAIMANT-${nowTs}`,
+          recipientEmail: "invalid-claimant@test.edu",
+          tenantId,
+          expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: null,
+          claimedByUserId: userIdAlice,
+        },
+      });
+    } catch (err: any) {
+      invalidInsertClaimantOnlyError = err;
+    }
+    expect(invalidInsertClaimantOnlyError).toBeDefined();
+    expect(String(invalidInsertClaimantOnlyError.message || invalidInsertClaimantOnlyError)).toMatch(/ownership state violation|paired ownership state|23514/i);
+
+    // 5b. Direct INSERT with consumedAt set but claimedByUserId null must be rejected (SQLSTATE 23514)
+    let invalidInsertConsumedOnlyError: any = null;
+    try {
+      await prisma.claimInvitation.create({
+        data: {
+          tokenHash: crypto.createHash("sha256").update(`inv_ins_consumed_${nowTs}`).digest("hex"),
+          credentialId: `urn:uuid:${crypto.randomUUID()}`,
+          certificateNumber: `INVALID-INS-CONSUMED-${nowTs}`,
+          recipientEmail: "invalid-consumed@test.edu",
+          tenantId,
+          expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: new Date(),
+          claimedByUserId: null,
+        },
+      });
+    } catch (err: any) {
+      invalidInsertConsumedOnlyError = err;
+    }
+    expect(invalidInsertConsumedOnlyError).toBeDefined();
+    expect(String(invalidInsertConsumedOnlyError.message || invalidInsertConsumedOnlyError)).toMatch(/ownership state violation|paired ownership state|23514/i);
+
+    // 5c. UPDATE on unconsumed invitation setting claimedByUserId without consumedAt must be rejected (SQLSTATE 23514)
+    let invalidUpdateClaimantOnlyError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: unconsumedInvitations[0].id },
+        data: { claimedByUserId: userIdAlice },
+      });
+    } catch (err: any) {
+      invalidUpdateClaimantOnlyError = err;
+    }
+    expect(invalidUpdateClaimantOnlyError).toBeDefined();
+    expect(String(invalidUpdateClaimantOnlyError.message || invalidUpdateClaimantOnlyError)).toMatch(/ownership state violation|paired ownership state|23514/i);
+
+    // 5d. UPDATE on unconsumed invitation setting consumedAt without claimedByUserId must be rejected (SQLSTATE 23514)
+    let invalidUpdateConsumedOnlyError: any = null;
+    try {
+      await prisma.claimInvitation.update({
+        where: { id: unconsumedInvitations[0].id },
+        data: { consumedAt: new Date() },
+      });
+    } catch (err: any) {
+      invalidUpdateConsumedOnlyError = err;
+    }
+    expect(invalidUpdateConsumedOnlyError).toBeDefined();
+    expect(String(invalidUpdateConsumedOnlyError.message || invalidUpdateConsumedOnlyError)).toMatch(/ownership state violation|paired ownership state|23514/i);
+
+    // Verify unconsumed invitation remains strictly intact and unassigned after rejected mutations
+    const losingInvAfterRejections = await prisma.claimInvitation.findUnique({
+      where: { id: unconsumedInvitations[0].id },
+    });
+    expect(losingInvAfterRejections?.consumedAt).toBeNull();
+    expect(losingInvAfterRejections?.claimedByUserId).toBeNull();
+
+    // 6. Verify the winner's ownership record remains intact in PostgreSQL after all rejected mutations
     const ownerAfterRejectedMutations = await prisma.claimInvitation.findUnique({
       where: { id: consumedOwners[0].id },
     });

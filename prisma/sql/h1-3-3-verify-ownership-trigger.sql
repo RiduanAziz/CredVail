@@ -1,9 +1,9 @@
--- CREDVAIL H1.3.3.1: PostgreSQL Catalog Verification for Ownership Monotonicity Trigger
+-- CREDVAIL H1.3.3.1: PostgreSQL Catalog Verification for Ownership Monotonicity & Paired State Trigger
 -- Verifies that:
 -- 1. Trigger 'trg_claim_invitation_monotonicity' exists on table 'claim_invitations' in schema 'public'
 -- 2. Trigger is enabled (tgenabled = 'O')
 -- 3. Trigger executes function 'trg_enforce_claim_invitation_monotonicity'
--- 4. Trigger fires BEFORE UPDATE for each row (tgtype & 2 = 2, tgtype & 16 = 16, tgtype & 1 = 1)
+-- 4. Trigger fires BEFORE INSERT OR UPDATE for each row (tgtype & 1 = 1, tgtype & 2 = 2, tgtype & 4 = 4, tgtype & 16 = 16)
 
 DO $$
 DECLARE
@@ -33,9 +33,10 @@ BEGIN
     RAISE EXCEPTION 'H1.3.3.1 trigger verification failed: trigger function is %, expected trg_enforce_claim_invitation_monotonicity', v_proname;
   END IF;
 
-  -- Verify BEFORE UPDATE FOR EACH ROW
+  -- Verify BEFORE INSERT OR UPDATE FOR EACH ROW
   -- Bit 0 (1): row-level trigger (FOR EACH ROW)
   -- Bit 1 (2): BEFORE trigger
+  -- Bit 2 (4): INSERT event
   -- Bit 4 (16): UPDATE event
   IF (v_tgtype & 1) = 0 THEN
     RAISE EXCEPTION 'H1.3.3.1 trigger verification failed: trigger is not row-level (tgtype = %)', v_tgtype;
@@ -43,6 +44,10 @@ BEGIN
 
   IF (v_tgtype & 2) = 0 THEN
     RAISE EXCEPTION 'H1.3.3.1 trigger verification failed: trigger is not BEFORE (tgtype = %)', v_tgtype;
+  END IF;
+
+  IF (v_tgtype & 4) = 0 THEN
+    RAISE EXCEPTION 'H1.3.3.1 trigger verification failed: trigger does not fire on INSERT (tgtype = %)', v_tgtype;
   END IF;
 
   IF (v_tgtype & 16) = 0 THEN
