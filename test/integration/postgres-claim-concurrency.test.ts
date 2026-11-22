@@ -158,66 +158,18 @@ describe("CREDVAIL PostgreSQL Live Concurrency & Transactional Integrity", () =>
   afterAll(async () => {
     if (isPostgresLive) {
       try {
-        const testUserIds = [userIdAlice, userIdBob].filter(Boolean);
-
-        // 1. Delete claim invitations first (depend on credentials, tenants, users)
+        // Clean up unconsumed invitations ONLY.
+        // Consumed claim invitations and their relational dependencies (credentials, batches, templates, keys, tenants, users)
+        // are retained in the disposable integration database because trg_claim_invitation_monotonicity
+        // and foreign key constraints (such as User onDelete: Restrict) permanently protect consumed ownership records.
         if (tenantId) {
-          await prisma.claimInvitation.deleteMany({ where: { tenantId } });
-        }
-
-        // 2. Delete audit logs associated with tenant or test users
-        if (tenantId || testUserIds.length > 0) {
-          await prisma.auditLog.deleteMany({
+          await prisma.claimInvitation.deleteMany({
             where: {
-              OR: [
-                ...(tenantId ? [{ tenantId }] : []),
-                ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
-              ],
+              tenantId,
+              consumedAt: null,
+              claimedByUserId: null,
             },
           });
-        }
-
-        // 3. Delete credential records before recipients (relational integrity: Recipient does not cascade delete credentials)
-        if (tenantId) {
-          await prisma.credentialRecord.deleteMany({ where: { tenantId } });
-        }
-
-        // 4. Delete recipients
-        if (tenantId) {
-          await prisma.recipient.deleteMany({ where: { tenantId } });
-        }
-
-        // 5. Delete issuance batches
-        if (tenantId) {
-          await prisma.issuanceBatch.deleteMany({ where: { tenantId } });
-        }
-
-        // 6. Delete templates and issuer keys
-        if (tenantId) {
-          await prisma.certificateTemplate.deleteMany({ where: { tenantId } });
-          await prisma.issuerKey.deleteMany({ where: { tenantId } });
-        }
-
-        // 7. Delete tenant memberships if any exist
-        if (tenantId || testUserIds.length > 0) {
-          await prisma.tenantMembership.deleteMany({
-            where: {
-              OR: [
-                ...(tenantId ? [{ tenantId }] : []),
-                ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
-              ],
-            },
-          });
-        }
-
-        // 8. Delete tenant
-        if (tenantId) {
-          await prisma.tenant.deleteMany({ where: { id: tenantId } });
-        }
-
-        // 9. Delete test users using their actual user IDs
-        if (testUserIds.length > 0) {
-          await prisma.user.deleteMany({ where: { id: { in: testUserIds } } });
         }
       } catch (cleanupErr: any) {
         console.error(

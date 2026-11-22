@@ -1012,11 +1012,29 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     let unrelatedViolationError: any = null;
     try {
       const existingTokenHash = (await prisma.claimInvitation.findFirstOrThrow()).tokenHash;
+      const certNumUnrelatedToken = `H133-CERT-TOKEN-${nowTs}`;
+      const credIdUnrelatedToken = `urn:uuid:${crypto.randomUUID()}`;
+      await prisma.credentialRecord.create({
+        data: {
+          credentialId: credIdUnrelatedToken,
+          certificateNumber: certNumUnrelatedToken,
+          tenantId,
+          batchId,
+          recipientId: recipientIdAlice,
+          leafHash: `leaf_hash_unrelated_token_${nowTs}`,
+          merkleIndex: 86,
+          bitstringIndex: 86,
+          state: "ISSUED",
+          claimsData: { course_name: "Unrelated Token Test" },
+          vcPayloadJson: signedVcAlice as any,
+        },
+      });
+
       await prisma.claimInvitation.create({
         data: {
           tokenHash: existingTokenHash,
-          credentialId: `urn:uuid:${crypto.randomUUID()}`,
-          certificateNumber: `UNRELATED-UNIQUE-${nowTs}`,
+          credentialId: credIdUnrelatedToken,
+          certificateNumber: certNumUnrelatedToken,
           recipientEmail: "unrelated@test.edu",
           tenantId,
           expiresAt: new Date(Date.now() + 86400000),
@@ -1298,11 +1316,39 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     expect(String(invalidInsertBothSetError.message || invalidInsertBothSetError)).toMatch(/initial state violation|ownership state violation|23514/i);
 
     // 5f. Legitimate pending invitation INSERT (both fields null) succeeds
+    const certNumLegitPending = `H133-CERT-PENDING-${nowTs}`;
+    const credIdLegitPending = `urn:uuid:${crypto.randomUUID()}`;
+    await prisma.credentialRecord.create({
+      data: {
+        credentialId: credIdLegitPending,
+        certificateNumber: certNumLegitPending,
+        tenantId,
+        batchId,
+        recipientId: recipientIdAlice,
+        leafHash: `leaf_hash_legit_pending_${nowTs}`,
+        merkleIndex: 84,
+        bitstringIndex: 84,
+        state: "ISSUED",
+        claimsData: { course_name: "Legit Pending Test" },
+        vcPayloadJson: signedVcAlice as any,
+      },
+    });
+
+    // Confirm no consumed owner invitation already exists for this newly generated credential
+    const existingOwnerForPending = await prisma.claimInvitation.findFirst({
+      where: {
+        credentialId: credIdLegitPending,
+        consumedAt: { not: null },
+        claimedByUserId: { not: null },
+      },
+    });
+    expect(existingOwnerForPending).toBeNull();
+
     const legitimatePending = await prisma.claimInvitation.create({
       data: {
         tokenHash: crypto.createHash("sha256").update(`inv_legit_pending_${nowTs}`).digest("hex"),
-        credentialId: `urn:uuid:${crypto.randomUUID()}`,
-        certificateNumber: `LEGIT-PENDING-${nowTs}`,
+        credentialId: credIdLegitPending,
+        certificateNumber: certNumLegitPending,
         recipientEmail: "legit-pending@test.edu",
         tenantId,
         expiresAt: new Date(Date.now() + 86400000),
