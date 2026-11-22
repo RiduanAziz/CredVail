@@ -114,4 +114,18 @@ describe("ECDSA NIST P-256 Key Generation & Cryptographic Operations", () => {
     const isWrongKeyValid = KeyService.verifySignature(keyPair2.publicKeyPem, message, signature);
     expect(isWrongKeyValid).toBe(false);
   });
+
+  it("should reconstruct usable SPKI PEM from public key multibase and verify ECDSA signatures", () => {
+    const keyPair = KeyService.generateEcdsaKeyPair();
+    const reconstructedPem = KeyService.multibaseToPublicKeyPem(keyPair.publicKeyMultibase);
+
+    expect(reconstructedPem).toBe(keyPair.publicKeyPem);
+
+    const message = "PostgreSQL reconstituted public key verification test";
+    const signature = KeyService.signData(keyPair.privateKeyPem, message);
+    expect(KeyService.verifySignature(reconstructedPem, message, signature)).toBe(true);
+
+    // Fail-closed verification: empty PEM fails closed without throwing unhandled exceptions
+    expect(KeyService.verifySignature("", message, signature)).toBe(false);
+  });
 });
