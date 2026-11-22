@@ -414,6 +414,21 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         bitstringIndex: 0,
       });
       signedVcAlice = VcService.signCredential(rawVcAlice, issuerKeyPair.privateKeyPem, key.keyIdentifier);
+      const vcHashAlice = VcService.computeVcHash(signedVcAlice);
+      const leafHashAlice = VcService.computeLeafHash(credIdAlice, certNumAlice, vcHashAlice);
+
+      const aliceMerkleTree = VcService.buildBatchMerkleTree([leafHashAlice]);
+      const aliceMerkleProof = VcService.generateMerkleProof(aliceMerkleTree, 0);
+
+      signedVcAlice = VcService.attachMerkleProof(signedVcAlice, aliceMerkleProof, batchId);
+
+      await prisma.issuanceBatch.update({
+        where: { id: batchId },
+        data: {
+          merkleRoot: aliceMerkleProof.root,
+          leafCount: 1,
+        },
+      });
 
       credAlice = await prisma.credentialRecord.create({
         data: {
@@ -422,7 +437,7 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           tenantId,
           batchId,
           recipientId: recipientIdAlice,
-          leafHash: "leaf_hash_alice",
+          leafHash: leafHashAlice,
           merkleIndex: 0,
           bitstringIndex: 0,
           state: "ISSUED",
@@ -596,7 +611,7 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           credentialId: credForeignTenant.credentialId,
           certificateNumber: credForeignTenant.certificateNumber,
           recipientEmail: "foreign@foreign.edu",
-          tenantId: foreignTenantId,
+          tenantId, // Intentional mismatch: primary tenant invitation referencing foreign tenant credential
           expiresAt: new Date(Date.now() + 86400000),
           consumedAt: null,
           claimedByUserId: null,
@@ -713,6 +728,15 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
 
     // Foreign tenant record with mismatched tenantId must be strictly excluded
     expect(creds.some((c) => c.credentialId === credForeignTenant.credentialId)).toBe(false);
+
+    // Authoritative ownership check must also evaluate to false
+    expect(
+      await WalletCredentialRepository.userOwnsCredential(
+        userIdAlice,
+        credForeignTenant.credentialId,
+        credForeignTenant.certificateNumber
+      )
+    ).toBe(false);
   });
 
   // H133-05: Exact credential identifier and certificate-number ownership succeeds for the rightful claimant
@@ -1511,6 +1535,18 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     const json = await res.json();
     expect(json.success).toBe(true);
     expect(json.data.verificationResult.isValid).toBe(true);
+
+    // Verify all essential cryptographic checks passed
+    const checkMap = new Map(
+      json.data.verificationResult.checks.map((c: any) => [c.code, c.passed])
+    );
+    expect(checkMap.get("HOLDER_PRESENTATION_SIGNATURE")).toBe(true);
+    expect(checkMap.get("CHALLENGE_NONCE_VERIFICATION")).toBe(true);
+    expect(checkMap.get("W3C_SCHEMA_CONFORMANCE")).toBe(true);
+    expect(checkMap.get("RFC8785_CANONICAL_HASH")).toBe(true);
+    expect(checkMap.get("ECDSA_P256_SIGNATURE")).toBe(true);
+    expect(checkMap.get("MERKLE_INCLUSION_PROOF")).toBe(true);
+    expect(checkMap.get("REVOCATION_STATUS")).toBe(true);
 
     // 6. Confirm challenge nonce was atomically consumed in PostgreSQL
     const consumedNonce = await prisma.challengeNonce.findUnique({

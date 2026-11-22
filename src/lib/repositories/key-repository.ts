@@ -127,6 +127,13 @@ export class KeyRepository {
 
         if (found) {
           // Reconstitute from stored attributes
+          let pem = "";
+          try {
+            pem = KeyService.multibaseToPublicKeyPem(found.publicKeyMultibase);
+          } catch {
+            // fallback
+          }
+
           const stored: StoredIssuerKey = {
             id: found.id,
             tenantId: found.tenantId,
@@ -134,7 +141,7 @@ export class KeyRepository {
             keyIdentifier: found.keyIdentifier,
             publicKeyMultibase: found.publicKeyMultibase,
             publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-            publicKeyPem: "",
+            publicKeyPem: pem,
             algorithm: found.algorithm,
             encryptedPrivateKey: found.encryptedPrivateKey,
             fingerprint: found.publicKeyMultibase.slice(0, 16),
@@ -174,6 +181,13 @@ export class KeyRepository {
           where: { tenantId, keyEpoch: epoch },
         });
         if (found) {
+          let pem = "";
+          try {
+            pem = KeyService.multibaseToPublicKeyPem(found.publicKeyMultibase);
+          } catch {
+            // fallback
+          }
+
           return {
             id: found.id,
             tenantId: found.tenantId,
@@ -181,7 +195,7 @@ export class KeyRepository {
             keyIdentifier: found.keyIdentifier,
             publicKeyMultibase: found.publicKeyMultibase,
             publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-            publicKeyPem: "",
+            publicKeyPem: pem,
             algorithm: found.algorithm,
             encryptedPrivateKey: found.encryptedPrivateKey,
             fingerprint: found.publicKeyMultibase.slice(0, 16),
@@ -224,6 +238,13 @@ export class KeyRepository {
 
         for (const dbk of dbKeys) {
           if (!keys.some((k) => k.id === dbk.id)) {
+            let pem = "";
+            try {
+              pem = KeyService.multibaseToPublicKeyPem(dbk.publicKeyMultibase);
+            } catch {
+              // fallback
+            }
+
             keys.push({
               id: dbk.id,
               tenantId: dbk.tenantId,
@@ -231,7 +252,7 @@ export class KeyRepository {
               keyIdentifier: dbk.keyIdentifier,
               publicKeyMultibase: dbk.publicKeyMultibase,
               publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-              publicKeyPem: "",
+              publicKeyPem: pem,
               algorithm: dbk.algorithm,
               encryptedPrivateKey: dbk.encryptedPrivateKey,
               fingerprint: dbk.publicKeyMultibase.slice(0, 16),
