@@ -16,6 +16,8 @@ import {
   ExternalLink,
   X,
   Palette,
+  Award,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,7 +44,9 @@ export default function TemplatesListPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const [slug, setSlug] = React.useState<string>("");
+  const unwrappedParams = React.use(params);
+  const slug = unwrappedParams.slug;
+
   const [templates, setTemplates] = React.useState<CertificateTemplateRecord[]>([]);
   const [loading, setLoading] = React.useState<boolean>(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -58,14 +62,7 @@ export default function TemplatesListPage({
   const [previewData, setPreviewData] = React.useState<any | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState<boolean>(false);
 
-  React.useEffect(() => {
-    params.then((p) => {
-      setSlug(p.slug);
-      loadTemplates(p.slug);
-    });
-  }, [params]);
-
-  const loadTemplates = async (tenantSlug: string, categoryFilter?: string) => {
+  const loadTemplates = React.useCallback(async (tenantSlug: string, categoryFilter?: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -83,7 +80,11 @@ export default function TemplatesListPage({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  React.useEffect(() => {
+    loadTemplates(slug);
+  }, [slug, loadTemplates]);
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
@@ -163,13 +164,21 @@ export default function TemplatesListPage({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Certificate Template Designer</h1>
-          <p className="text-xs text-muted-foreground">
-            Visual vector certificate designer supporting dynamic placeholders, custom borders, and dynamic QR positioning.
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
+              Certificate Template Studio
+            </h1>
+            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+              <Sparkles className="h-3 w-3" />
+              Vector Engine
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Visual vector certificate designer supporting dynamic placeholders, custom borders, typography presets, and dynamic QR positioning.
           </p>
         </div>
 
@@ -185,7 +194,7 @@ export default function TemplatesListPage({
           </Button>
 
           <Link href={`/${slug}/templates/new`}>
-            <Button size="sm" className="gap-1.5 text-xs">
+            <Button variant="brand" size="sm" className="gap-1.5 text-xs shadow-sm font-medium">
               <Plus className="h-3.5 w-3.5" />
               <span>Create New Template</span>
             </Button>
@@ -209,14 +218,14 @@ export default function TemplatesListPage({
       )}
 
       {/* Category Filter Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none text-xs">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
         <Button
           variant={selectedCategory === "ALL" ? "default" : "outline"}
           size="sm"
           className="h-7 text-xs rounded-full"
           onClick={() => handleCategoryChange("ALL")}
         >
-          All Categories
+          All Categories ({templates.length})
         </Button>
         {Object.entries(CATEGORY_NAMES).map(([cat, label]) => (
           <Button
@@ -235,7 +244,7 @@ export default function TemplatesListPage({
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-72 bg-muted/40 rounded-xl animate-pulse" />
+            <div key={i} className="h-72 bg-muted/40 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : templates.length === 0 ? (
@@ -249,7 +258,7 @@ export default function TemplatesListPage({
               Start by choosing one of the 10 pre-engineered W3C-compatible certificate presets or create a custom canvas from scratch.
             </p>
           </div>
-          <Button size="sm" onClick={() => setPresetModalOpen(true)} className="gap-1.5">
+          <Button size="sm" variant="brand" onClick={() => setPresetModalOpen(true)} className="gap-1.5 text-xs">
             <Sparkles className="h-4 w-4" />
             <span>Browse 10 Presets</span>
           </Button>
@@ -265,12 +274,12 @@ export default function TemplatesListPage({
             return (
               <Card
                 key={tmpl.id}
-                className="border shadow-xs overflow-hidden flex flex-col justify-between hover:shadow-md transition-shadow group"
+                className="border shadow-xs overflow-hidden flex flex-col justify-between hover:shadow-md hover:border-primary/40 transition-all group"
               >
                 <div>
                   {/* Thumbnail Preview Area */}
                   <div
-                    className="h-40 bg-muted/20 border-b p-3 flex flex-col justify-between relative overflow-hidden"
+                    className="h-44 bg-muted/20 border-b p-4 flex flex-col justify-between relative overflow-hidden"
                     style={{ backgroundColor: tmpl.layoutConfig.backgroundColor || "#ffffff" }}
                   >
                     <div
@@ -295,12 +304,12 @@ export default function TemplatesListPage({
 
                     <div className="relative z-10 text-center my-auto px-4">
                       <div
-                        className="text-xs font-bold truncate"
+                        className="text-xs font-serif font-bold truncate"
                         style={{ color: borderCol }}
                       >
                         {tmpl.title}
                       </div>
-                      <div className="text-[10px] text-muted-foreground italic truncate">
+                      <div className="text-[10px] text-muted-foreground italic truncate mt-0.5">
                         {"{{recipient_name}}"}
                       </div>
                     </div>
@@ -320,7 +329,7 @@ export default function TemplatesListPage({
                 </div>
 
                 <CardFooter className="p-4 pt-2 border-t bg-muted/10 flex items-center justify-between">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <Button
                       variant="outline"
                       size="sm"
@@ -356,8 +365,8 @@ export default function TemplatesListPage({
 
       {/* Preset Library Selection Modal */}
       {presetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
-          <Card className="w-full max-w-4xl max-h-[85vh] border shadow-xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-4xl max-h-[85vh] border shadow-2xl flex flex-col overflow-hidden animate-in fade-in-50 zoom-in-95">
             <CardHeader className="flex flex-row items-center justify-between p-5 pb-3 border-b">
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
@@ -389,7 +398,7 @@ export default function TemplatesListPage({
                   >
                     <div className="space-y-1 mb-3">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs text-foreground">{p.title}</span>
+                        <span className="font-bold text-xs text-foreground font-serif">{p.title}</span>
                         <Badge variant="outline" className="text-[9px]">
                           {CATEGORY_NAMES[key]}
                         </Badge>
@@ -403,11 +412,12 @@ export default function TemplatesListPage({
                       </span>
                       <Button
                         size="sm"
+                        variant="brand"
                         className="h-7 text-xs"
                         onClick={() => handleCreateFromPreset(key)}
                         disabled={creatingFromPreset}
                       >
-                        Use Preset
+                        <span>Use Preset</span>
                       </Button>
                     </div>
                   </div>
@@ -420,8 +430,8 @@ export default function TemplatesListPage({
 
       {/* Real-Time Preview Modal */}
       {previewModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-xs p-4">
-          <Card className="w-full max-w-4xl max-h-[90vh] border shadow-2xl flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] border shadow-2xl flex flex-col overflow-hidden animate-in fade-in-50 zoom-in-95">
             <CardHeader className="flex flex-row items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
                 <CardTitle className="text-sm font-bold">Vector PDF / SVG Certificate Preview</CardTitle>
@@ -442,6 +452,7 @@ export default function TemplatesListPage({
             <CardContent className="p-6 overflow-y-auto flex items-center justify-center bg-muted/40 min-h-[420px]">
               {previewLoading ? (
                 <div className="text-center text-xs text-muted-foreground animate-pulse">
+                  <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                   Generating dynamic vector preview and rendering QR code...
                 </div>
               ) : previewData ? (

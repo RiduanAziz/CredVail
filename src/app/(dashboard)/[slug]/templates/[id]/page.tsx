@@ -19,6 +19,8 @@ import {
   Move,
   RotateCw,
   Sparkles,
+  Layers,
+  Sliders,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -226,7 +228,7 @@ export default function TemplateDesignerPage({
   return (
     <div className="space-y-4">
       {/* Top Action Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-background p-4 border rounded-xl shadow-xs">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-card p-4 border rounded-xl shadow-xs">
         <div className="flex items-center gap-3">
           <Link href={`/${slug}/templates`}>
             <Button variant="outline" size="sm" className="h-8 w-8 p-0">
@@ -237,7 +239,7 @@ export default function TemplateDesignerPage({
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="h-8 text-sm font-bold border-transparent hover:border-input focus:border-input bg-transparent px-1"
+              className="h-8 text-sm font-bold border-transparent hover:border-input focus:border-input bg-transparent px-1 font-serif"
             />
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <span>{category}</span>
@@ -271,9 +273,10 @@ export default function TemplateDesignerPage({
 
           <Button
             size="sm"
+            variant="brand"
             onClick={handleSave}
             disabled={saving}
-            className="gap-1.5 text-xs h-8"
+            className="gap-1.5 text-xs h-8 shadow-sm font-medium"
           >
             <Save className="h-3.5 w-3.5" />
             <span>{saving ? "Saving..." : "Save Template"}</span>
@@ -302,8 +305,9 @@ export default function TemplateDesignerPage({
         <div className="lg:col-span-3 space-y-4">
           <Card className="border shadow-xs">
             <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Elements Library
+              <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                <span>Elements Library</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-1 space-y-3">
@@ -490,7 +494,10 @@ export default function TemplateDesignerPage({
           <Card className="border shadow-xs">
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                <span>Inspector</span>
+                <span className="flex items-center gap-1.5">
+                  <Sliders className="h-3.5 w-3.5 text-primary" />
+                  Inspector
+                </span>
                 {selectedType && (
                   <Badge variant="outline" className="text-[9px] font-mono">
                     {selectedType}

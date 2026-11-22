@@ -19,6 +19,11 @@ import {
   CheckCircle2,
   XCircle,
   Hash,
+  Sparkles,
+  ArrowRight,
+  Activity,
+  Layers,
+  Fingerprint,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -109,7 +114,7 @@ export default function KeysPage({
       if (res.ok && json?.success) {
         setNotification({
           type: "success",
-          message: `Successfully rotated to Key Epoch ${json.data.keyEpoch}.`,
+          message: `Successfully advanced institutional signing authority to Key Epoch ${json.data.keyEpoch}.`,
         });
         setShowRotateModal(false);
         await fetchKeys();
@@ -181,8 +186,9 @@ export default function KeysPage({
             <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
               Signing Keys & Institutional Trust
             </h1>
-            <Badge variant="outline" className="font-mono text-xs bg-primary/5 text-primary border-primary/20">
-              Phase 7 Complete
+            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+              <Sparkles className="h-3 w-3" />
+              Cryptographic Governance
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground mt-1">
@@ -196,26 +202,82 @@ export default function KeysPage({
             size="sm"
             onClick={fetchKeys}
             disabled={loading}
-            className="gap-2"
+            className="gap-2 text-xs"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            Refresh Keys
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <span>Refresh Keys</span>
           </Button>
           <Button
             size="sm"
+            variant="brand"
             onClick={() => setShowRotateModal(true)}
-            className="gap-2 shadow-sm bg-primary text-primary-foreground hover:bg-primary/90"
+            className="gap-2 text-xs shadow-sm font-medium"
           >
-            <KeyRound className="h-4 w-4" />
-            Rotate Key Epoch
+            <KeyRound className="h-3.5 w-3.5" />
+            <span>Rotate Key Epoch</span>
           </Button>
         </div>
+      </div>
+
+      {/* Metrics Overview */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Active Key Epoch
+            </span>
+            <KeyRound className="h-4 w-4 text-primary" />
+          </div>
+          <p className="text-2xl font-bold font-mono text-foreground mt-2">
+            Epoch #{data?.activeKey?.keyEpoch ?? 1}
+          </p>
+          <span className="text-[10px] text-muted-foreground">Active signing authority</span>
+        </Card>
+
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-indigo-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Curve & Algorithm
+            </span>
+            <ShieldCheck className="h-4 w-4 text-indigo-500" />
+          </div>
+          <p className="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-2">
+            P-256
+          </p>
+          <span className="text-[10px] text-muted-foreground">secp256r1 • RFC 8785 Canonical</span>
+        </Card>
+
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-emerald-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Total Key Epochs
+            </span>
+            <Layers className="h-4 w-4 text-emerald-500" />
+          </div>
+          <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">
+            {data?.allEpochs.length || 1}
+          </p>
+          <span className="text-[10px] text-muted-foreground">Historical verification intact</span>
+        </Card>
+
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-amber-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Identity Standard
+            </span>
+            <Shield className="h-4 w-4 text-amber-500" />
+          </div>
+          <p className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-2">
+            did:web
+          </p>
+          <span className="text-[10px] text-muted-foreground">W3C DID v1.0 standard compliant</span>
+        </Card>
       </div>
 
       {/* Notifications */}
       {notification && (
         <div
-          className={`p-4 rounded-lg flex items-center justify-between gap-3 text-sm border ${
+          className={`p-4 rounded-xl flex items-center justify-between gap-3 text-xs border ${
             notification.type === "success"
               ? "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300"
               : "bg-rose-50 border-rose-200 text-rose-800 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300"
@@ -223,11 +285,11 @@ export default function KeysPage({
         >
           <div className="flex items-center gap-2">
             {notification.type === "success" ? (
-              <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             ) : (
-              <AlertTriangle className="h-5 w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
             )}
-            <span>{notification.message}</span>
+            <span className="font-medium">{notification.message}</span>
           </div>
           <button
             onClick={() => setNotification(null)}
@@ -239,11 +301,11 @@ export default function KeysPage({
       )}
 
       {/* Institutional Identity (did:web) Card */}
-      <Card className="border border-border/70 shadow-sm bg-linear-to-r from-card via-card to-muted/20">
-        <CardHeader className="pb-3">
+      <Card className="border shadow-xs bg-linear-to-r from-card via-card to-muted/20">
+        <CardHeader className="pb-3 border-b border-border/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary">
                 <Shield className="h-5 w-5" />
               </div>
               <div>
@@ -264,8 +326,8 @@ export default function KeysPage({
             </Link>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-md bg-muted/50 border border-border/50 font-mono text-xs">
+        <CardContent className="pt-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg bg-muted/40 border border-border/50 font-mono text-xs">
             <div className="flex items-center gap-2 overflow-x-auto w-full">
               <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="font-semibold text-foreground select-all">
@@ -281,12 +343,12 @@ export default function KeysPage({
               {copiedId === "did-uri" ? (
                 <>
                   <Check className="h-3.5 w-3.5 text-emerald-600 mr-1" />
-                  Copied
+                  <span>Copied</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-3.5 w-3.5 mr-1" />
-                  Copy DID
+                  <span>Copy DID</span>
                 </>
               )}
             </Button>
@@ -326,7 +388,7 @@ export default function KeysPage({
                   onClick={() => setInspectKey(data.activeKey)}
                 >
                   <Code className="h-3.5 w-3.5" />
-                  Inspect Public JWK
+                  <span>Inspect Public JWK</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -335,7 +397,7 @@ export default function KeysPage({
                   onClick={() => setCompromiseTarget(data.activeKey)}
                 >
                   <AlertTriangle className="h-3.5 w-3.5" />
-                  Report Compromise
+                  <span>Report Compromise</span>
                 </Button>
               </div>
             </div>
@@ -343,7 +405,7 @@ export default function KeysPage({
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-3.5 rounded-lg border border-border/60 bg-background/50 space-y-1.5">
-                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Hash className="h-3.5 w-3.5" />
                   Cryptographic Fingerprint (SHA-256)
                 </div>
@@ -361,7 +423,7 @@ export default function KeysPage({
               </div>
 
               <div className="p-3.5 rounded-lg border border-border/60 bg-background/50 space-y-1.5">
-                <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <FileCode className="h-3.5 w-3.5" />
                   Multibase Base58-BTC Key
                 </div>
@@ -409,11 +471,11 @@ export default function KeysPage({
       )}
 
       {/* Key Epochs History Table */}
-      <Card className="border shadow-xs">
-        <CardHeader className="pb-4">
+      <Card className="border shadow-xs overflow-hidden">
+        <CardHeader className="pb-4 border-b border-border/60">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-lg font-bold">Key Epoch History & Lifecycle</CardTitle>
+              <CardTitle className="text-base font-bold">Key Epoch History & Lifecycle</CardTitle>
               <CardDescription className="text-xs">
                 Audit trail of all signing key epochs. Historical keys verify credentials issued in past epochs.
               </CardDescription>
@@ -427,7 +489,7 @@ export default function KeysPage({
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-border bg-muted/40 font-medium text-muted-foreground uppercase tracking-wider text-[11px]">
+                <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
                   <th className="py-3 px-4">Epoch</th>
                   <th className="py-3 px-4">Algorithm</th>
                   <th className="py-3 px-4">Fingerprint</th>
@@ -471,7 +533,7 @@ export default function KeysPage({
                         </td>
                         <td className="py-3 px-4">
                           {isKeyActive && (
-                            <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300">
+                            <Badge variant="verified" className="font-mono text-[10px]">
                               ACTIVE
                             </Badge>
                           )}
@@ -487,7 +549,7 @@ export default function KeysPage({
                             </Badge>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-muted-foreground">
+                        <td className="py-3 px-4 text-muted-foreground font-mono text-[11px]">
                           <div>From: {new Date(key.validFrom).toLocaleDateString()}</div>
                           {key.validTo && <div>To: {new Date(key.validTo).toLocaleDateString()}</div>}
                         </td>
@@ -500,7 +562,7 @@ export default function KeysPage({
                               onClick={() => setInspectKey(key)}
                             >
                               <Code className="h-3.5 w-3.5 mr-1" />
-                              JWK
+                              <span>JWK</span>
                             </Button>
                             {!key.isCompromised && (
                               <Button
@@ -509,7 +571,7 @@ export default function KeysPage({
                                 className="h-7 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/50"
                                 onClick={() => setCompromiseTarget(key)}
                               >
-                                Revoke
+                                <span>Revoke</span>
                               </Button>
                             )}
                           </div>
@@ -528,7 +590,7 @@ export default function KeysPage({
       {showRotateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <Card className="w-full max-w-lg shadow-2xl border border-border animate-in fade-in-50 zoom-in-95">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-3 border-b">
               <div className="flex items-center gap-3">
                 <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                   <RefreshCw className="h-5 w-5" />
@@ -541,19 +603,19 @@ export default function KeysPage({
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3 text-xs text-muted-foreground leading-relaxed">
-              <p>
-                Rotating your key epoch will:
+            <CardContent className="space-y-3 pt-4 text-xs text-muted-foreground leading-relaxed">
+              <p className="font-semibold text-foreground">
+                Rotating your institutional key epoch will:
               </p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>
-                  Generate a cryptographically isolated <strong>ECDSA P-256</strong> key pair.
+                  Generate a cryptographically isolated <strong>ECDSA P-256</strong> key pair in your hardware/software vault.
                 </li>
                 <li>
                   Advance the active signing epoch from <strong className="text-foreground">Epoch {data?.activeKey?.keyEpoch ?? 1}</strong> to <strong className="text-foreground">Epoch {(data?.activeKey?.keyEpoch ?? 1) + 1}</strong>.
                 </li>
                 <li>
-                  Gracefully transition the previous key to <strong className="text-foreground">ROTATED</strong> status. All certificates issued previously remain 100% authentic.
+                  Transition the previous key to <strong className="text-foreground">ROTATED</strong> status. All certificates issued previously remain 100% authentic and verifiable.
                 </li>
                 <li>
                   Update the institutional W3C <code className="font-mono">did:web</code> document assertion methods.
@@ -571,19 +633,20 @@ export default function KeysPage({
               </Button>
               <Button
                 size="sm"
+                variant="brand"
                 onClick={handleRotateKey}
                 disabled={rotating}
-                className="gap-2 bg-primary text-primary-foreground"
+                className="gap-2"
               >
                 {rotating ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Generating Key...
+                    <span>Generating Key...</span>
                   </>
                 ) : (
                   <>
                     <KeyRound className="h-4 w-4" />
-                    Confirm Epoch Rotation
+                    <span>Confirm Epoch Rotation</span>
                   </>
                 )}
               </Button>
@@ -657,12 +720,12 @@ export default function KeysPage({
                 {compromiseLoading ? (
                   <>
                     <RefreshCw className="h-4 w-4 animate-spin" />
-                    Revoking...
+                    <span>Revoking...</span>
                   </>
                 ) : (
                   <>
                     <XCircle className="h-4 w-4" />
-                    Confirm Emergency Compromise
+                    <span>Confirm Emergency Compromise</span>
                   </>
                 )}
               </Button>
@@ -682,7 +745,7 @@ export default function KeysPage({
                     <Code className="h-5 w-5" />
                   </div>
                   <div>
-                    <CardTitle className="text-base">
+                    <CardTitle className="text-base font-bold">
                       Public Key Specification • Epoch {inspectKey.keyEpoch}
                     </CardTitle>
                     <CardDescription className="text-xs">
@@ -690,7 +753,7 @@ export default function KeysPage({
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant={inspectKey.isActive ? "default" : inspectKey.isCompromised ? "destructive" : "secondary"}>
+                <Badge variant={inspectKey.isActive ? "verified" : inspectKey.isCompromised ? "destructive" : "secondary"}>
                   {inspectKey.isActive ? "ACTIVE" : inspectKey.isCompromised ? "COMPROMISED" : "ROTATED"}
                 </Badge>
               </div>
@@ -706,7 +769,7 @@ export default function KeysPage({
                     onClick={() => handleCopy(inspectKey.keyIdentifier, "inspect-kid")}
                   >
                     {copiedId === "inspect-kid" ? <Check className="h-3 w-3 text-emerald-600 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                    Copy
+                    <span>Copy</span>
                   </Button>
                 </div>
                 <div className="p-2.5 rounded bg-muted font-mono text-[11px] break-all border border-border/50">
@@ -724,7 +787,7 @@ export default function KeysPage({
                     onClick={() => handleCopy(JSON.stringify(inspectKey.publicKeyJwk, null, 2), "inspect-jwk")}
                   >
                     {copiedId === "inspect-jwk" ? <Check className="h-3 w-3 text-emerald-600 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                    Copy JSON
+                    <span>Copy JSON</span>
                   </Button>
                 </div>
                 <pre className="p-3 rounded-lg bg-zinc-950 text-emerald-400 font-mono text-[11px] overflow-x-auto max-h-48 border border-zinc-800">
@@ -742,7 +805,7 @@ export default function KeysPage({
                     onClick={() => handleCopy(inspectKey.publicKeyMultibase, "inspect-mb")}
                   >
                     {copiedId === "inspect-mb" ? <Check className="h-3 w-3 text-emerald-600 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-                    Copy
+                    <span>Copy</span>
                   </Button>
                 </div>
                 <div className="p-2.5 rounded bg-muted font-mono text-[11px] break-all border border-border/50">

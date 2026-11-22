@@ -22,6 +22,11 @@ import {
   Ban,
   Clock,
   Activity,
+  Sparkles,
+  Layers,
+  Eye,
+  FileCode,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +48,8 @@ export default function CertificatesPage({
   const [loading, setLoading] = React.useState<boolean>(true);
   const [searchQuery, setSearchQuery] = React.useState<string>("");
   const [statusFilter, setStatusFilter] = React.useState<string>("ALL");
+
+  // Modals state
   const [selectedQrCred, setSelectedQrCred] = React.useState<StoredCredentialRecord | null>(null);
   const [selectedVcCred, setSelectedVcCred] = React.useState<StoredCredentialRecord | null>(null);
   const [selectedMerkleCred, setSelectedMerkleCred] = React.useState<StoredCredentialRecord | null>(null);
@@ -108,7 +115,6 @@ export default function CertificatesPage({
       if (json.success && json.data) {
         setMerkleProofData(json.data);
       } else {
-        // Fall back to evidence from VC payload
         const evidence = (cred.vcPayloadJson as any)?.evidence?.[0];
         if (evidence && evidence.proof) {
           setMerkleProofData({
@@ -166,7 +172,6 @@ export default function CertificatesPage({
           epoch: json.data.statusEpoch || json.data.statusSnapshot?.epoch,
           onChainTxHash: json.data.statusSnapshot?.onChainTxHash,
         });
-        // Update credentials list in place
         setCredentials((prev) =>
           prev.map((c) => (c.id === selectedRevokeCred.id ? { ...c, state: "REVOKED" } : c))
         );
@@ -180,6 +185,9 @@ export default function CertificatesPage({
     }
   };
 
+  const activeCount = credentials.filter((c) => c.state === "ISSUED").length;
+  const revokedCount = credentials.filter((c) => c.state === "REVOKED").length;
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -189,63 +197,70 @@ export default function CertificatesPage({
             <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
               Digital Certificates
             </h1>
-            <Badge variant="outline" className="border-primary/40 text-primary font-mono text-xs">
-              Phase 8: W3C VC 2.0 & Merkle Proofs
+            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+              <Sparkles className="h-3 w-3" />
+              W3C VC 2.0 & Merkle Proofs
             </Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
-            W3C Verifiable Credentials 2.0 with ECDSA NIST P-256 digital signatures, deterministic Keccak-256 Merkle proofs, and print-ready vector PDFs.
+            W3C Verifiable Credentials 2.0 signed with ECDSA NIST P-256, verified via Keccak-256 Merkle proofs and W3C Bitstring Status Lists.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Link href={`/${slug}/batches`}>
-            <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button variant="brand" size="sm" className="gap-2 shadow-sm text-xs">
               <Award className="h-4 w-4" />
-              Ingest & Generate New Batch
+              <span>Ingest & Generate New Batch</span>
             </Button>
           </Link>
         </div>
       </div>
 
       {/* Metrics Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4 bg-muted/20 border-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
-              <Award className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Total Registered</p>
-              <p className="text-2xl font-bold font-mono">{totalCount}</p>
-            </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Total Minted
+            </span>
+            <Award className="h-4 w-4 text-primary" />
           </div>
+          <p className="text-2xl font-bold font-mono text-foreground mt-2">{totalCount}</p>
+          <span className="text-[10px] text-muted-foreground">Lifetime credential registry</span>
         </Card>
 
-        <Card className="p-4 bg-muted/20 border-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Active & Issued</p>
-              <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                {credentials.filter((c) => c.state === "ISSUED").length}
-              </p>
-            </div>
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-emerald-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Active & Valid
+            </span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
           </div>
+          <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">{activeCount}</p>
+          <span className="text-[10px] text-muted-foreground">W3C Bitstring bit = 0 (Unrevoked)</span>
         </Card>
 
-        <Card className="p-4 bg-muted/20 border-border">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Print-Ready PDFs</p>
-              <p className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400">{totalCount}</p>
-            </div>
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-rose-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Revoked Credentials
+            </span>
+            <Ban className="h-4 w-4 text-rose-500" />
           </div>
+          <p className="text-2xl font-bold font-mono text-rose-600 dark:text-rose-400 mt-2">{revokedCount}</p>
+          <span className="text-[10px] text-muted-foreground">Status list updated on-chain</span>
+        </Card>
+
+        <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-blue-500/40 transition-colors">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Print-Ready PDFs
+            </span>
+            <FileText className="h-4 w-4 text-blue-500" />
+          </div>
+          <p className="text-2xl font-bold font-mono text-blue-600 dark:text-blue-400 mt-2">{totalCount}</p>
+          <span className="text-[10px] text-muted-foreground">High-DPI vector rendering ready</span>
         </Card>
       </div>
 
@@ -280,6 +295,7 @@ export default function CertificatesPage({
             size="sm"
             onClick={fetchCredentials}
             className="h-8 px-2 text-muted-foreground"
+            title="Refresh"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -287,25 +303,25 @@ export default function CertificatesPage({
       </div>
 
       {/* Credentials Table */}
-      <Card className="border shadow-xs">
+      <Card className="border shadow-xs overflow-hidden">
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-border bg-muted/40 font-medium text-muted-foreground uppercase tracking-wider text-[11px]">
-                  <th className="p-3">Certificate #</th>
-                  <th className="p-3">Recipient</th>
-                  <th className="p-3">Email</th>
-                  <th className="p-3">Course / Award</th>
-                  <th className="p-3">Issue Date</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Cryptographic Actions</th>
+                <tr className="border-b border-border bg-muted/40 font-semibold text-muted-foreground uppercase tracking-wider text-[10px]">
+                  <th className="p-3.5">Certificate #</th>
+                  <th className="p-3.5">Recipient</th>
+                  <th className="p-3.5">Email</th>
+                  <th className="p-3.5">Course / Award</th>
+                  <th className="p-3.5">Issue Date</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-right">Cryptographic Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {loading && credentials.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-12 text-center text-muted-foreground">
                       <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
                       Loading credentials repository...
                     </td>
@@ -313,15 +329,15 @@ export default function CertificatesPage({
                 ) : credentials.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-12 text-center space-y-2">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 text-primary mx-auto flex items-center justify-center">
+                      <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary mx-auto flex items-center justify-center">
                         <Award className="h-6 w-6" />
                       </div>
                       <p className="text-sm font-semibold text-foreground">No certificates found</p>
                       <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                        No digital certificates have been issued yet. Head over to Batches to upload a recipient spreadsheet and generate certificates.
+                        No digital certificates match your filter. Upload a recipient spreadsheet to generate verifiable credentials.
                       </p>
                       <Link href={`/${slug}/batches`}>
-                        <Button size="sm" className="mt-2 text-xs">
+                        <Button variant="brand" size="sm" className="mt-2 text-xs">
                           Go to Spreadsheet Ingestion
                         </Button>
                       </Link>
@@ -330,24 +346,24 @@ export default function CertificatesPage({
                 ) : (
                   credentials.map((cred) => (
                     <tr key={cred.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="p-3 font-mono font-bold text-foreground">
+                      <td className="p-3.5 font-mono font-bold text-foreground">
                         <Badge variant="outline" className="font-mono text-[11px] bg-background">
                           {cred.certificateNumber}
                         </Badge>
                       </td>
-                      <td className="p-3 font-medium text-foreground">{cred.recipientName}</td>
-                      <td className="p-3 font-mono text-muted-foreground">{cred.recipientEmail}</td>
-                      <td className="p-3 text-muted-foreground">
+                      <td className="p-3.5 font-medium text-foreground">{cred.recipientName}</td>
+                      <td className="p-3.5 font-mono text-muted-foreground">{cred.recipientEmail}</td>
+                      <td className="p-3.5 text-muted-foreground font-medium">
                         {cred.claimsData["course_name"] || "General Certificate"}
                       </td>
-                      <td className="p-3 text-muted-foreground">
+                      <td className="p-3.5 text-muted-foreground font-mono">
                         {cred.claimsData["issue_date"] || new Date(cred.createdAt).toLocaleDateString()}
                       </td>
-                      <td className="p-3">
+                      <td className="p-3.5">
                         <Badge
                           variant={
                             cred.state === "ISSUED"
-                              ? "default"
+                              ? "verified"
                               : cred.state === "REVOKED"
                               ? "destructive"
                               : "secondary"
@@ -357,7 +373,7 @@ export default function CertificatesPage({
                           {cred.state}
                         </Badge>
                       </td>
-                      <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                      <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
                         {/* Inspect Signed W3C VC JSON */}
                         <Button
                           variant="ghost"
@@ -367,7 +383,7 @@ export default function CertificatesPage({
                           className="h-7 px-2 text-xs gap-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                         >
                           <Code className="h-3.5 w-3.5" />
-                          VC JSON
+                          <span>VC JSON</span>
                         </Button>
 
                         {/* View Merkle Inclusion Proof */}
@@ -379,7 +395,7 @@ export default function CertificatesPage({
                           className="h-7 px-2 text-xs gap-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
                         >
                           <Network className="h-3.5 w-3.5" />
-                          Merkle Proof
+                          <span>Proof</span>
                         </Button>
 
                         {/* View QR Code */}
@@ -406,7 +422,7 @@ export default function CertificatesPage({
                             className="h-7 px-2 text-xs gap-1 text-primary hover:text-primary hover:bg-primary/10"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
-                            Verify
+                            <span>Verify</span>
                           </Button>
                         </a>
 
@@ -422,11 +438,11 @@ export default function CertificatesPage({
                             className="h-7 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
                           >
                             <Download className="h-3 w-3" />
-                            PDF
+                            <span>PDF</span>
                           </Button>
                         </a>
 
-                        {/* Phase 12: Revoke Credential */}
+                        {/* Revoke Credential */}
                         {cred.state === "ISSUED" ? (
                           <Button
                             variant="ghost"
@@ -441,7 +457,7 @@ export default function CertificatesPage({
                             className="h-7 px-2 text-xs gap-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                           >
                             <Ban className="h-3.5 w-3.5" />
-                            Revoke
+                            <span>Revoke</span>
                           </Button>
                         ) : (
                           <span className="inline-flex items-center text-[10px] text-rose-500 font-mono px-1.5 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">
@@ -460,15 +476,15 @@ export default function CertificatesPage({
 
       {/* QR Code Modal */}
       {selectedQrCred && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <Card className="w-full max-w-sm shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <Card className="w-full max-w-sm shadow-2xl animate-in fade-in-50 zoom-in-95">
             <CardHeader className="text-center pb-2">
-              <CardTitle className="text-lg">Certificate Verification QR</CardTitle>
+              <CardTitle className="text-base font-bold">Certificate Verification QR</CardTitle>
               <CardDescription className="text-xs font-mono">{selectedQrCred.certificateNumber}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 text-center p-6">
-              <div className="border border-border p-4 bg-white rounded-xl inline-block shadow-xs">
-                <div className="h-44 w-44 mx-auto flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg">
+              <div className="border border-border p-4 bg-white rounded-2xl inline-block shadow-sm">
+                <div className="h-44 w-44 mx-auto flex items-center justify-center bg-slate-50 border border-slate-200 rounded-xl">
                   <QrIcon className="h-32 w-32 text-slate-900" />
                 </div>
               </div>
@@ -496,7 +512,7 @@ export default function CertificatesPage({
               >
                 <Button variant="outline" size="sm" className="w-full text-xs gap-1 border-primary/30 text-primary">
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Public Portal
+                  Portal
                 </Button>
               </a>
               <a
@@ -505,9 +521,9 @@ export default function CertificatesPage({
                 rel="noreferrer"
                 className="flex-1"
               >
-                <Button size="sm" className="w-full text-xs gap-1.5">
+                <Button size="sm" variant="brand" className="w-full text-xs gap-1.5">
                   <Download className="h-3.5 w-3.5" />
-                  Download PDF
+                  PDF
                 </Button>
               </a>
             </CardFooter>
@@ -515,7 +531,7 @@ export default function CertificatesPage({
         </div>
       )}
 
-      {/* W3C Verifiable Credential 2.0 Inspector Modal */}
+      {/* W3C VC 2.0 Inspector Modal */}
       {selectedVcCred && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <Card className="w-full max-w-2xl shadow-2xl border border-border animate-in fade-in-50 zoom-in-95">
@@ -687,7 +703,7 @@ export default function CertificatesPage({
                     </div>
                   </div>
 
-                  {/* On-Chain Sepolia Smart Contract Verification */}
+                  {/* Sepolia Verification */}
                   <div className="p-3.5 rounded-lg border border-indigo-200 dark:border-indigo-900 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -718,7 +734,7 @@ export default function CertificatesPage({
                             className="inline-flex items-center gap-1 text-indigo-500 hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            Etherscan
+                            <span>Etherscan</span>
                           </a>
                         </div>
                         {onChainResult.anchoredAtDate && (
@@ -735,7 +751,7 @@ export default function CertificatesPage({
                         className="w-full h-8 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
                       >
                         <Network className={`h-3.5 w-3.5 ${onChainVerifying ? "animate-spin" : ""}`} />
-                        {onChainVerifying ? "Verifying on Sepolia..." : "Verify On-Chain (CredvailRegistry.sol)"}
+                        <span>{onChainVerifying ? "Verifying on Sepolia..." : "Verify On-Chain (CredvailRegistry.sol)"}</span>
                       </Button>
                     )}
                   </div>
@@ -764,10 +780,10 @@ export default function CertificatesPage({
         </div>
       )}
 
-      {/* Phase 12: Revocation Confirmation Modal */}
+      {/* Revocation Modal */}
       {selectedRevokeCred && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <Card className="w-full max-w-md shadow-2xl border-rose-200 dark:border-rose-900">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <Card className="w-full max-w-md shadow-2xl border-rose-200 dark:border-rose-900 animate-in fade-in-50 zoom-in-95">
             <CardHeader className="pb-3 border-b border-border">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
                 <Ban className="h-5 w-5" />
@@ -800,55 +816,51 @@ export default function CertificatesPage({
                     <span>Revocation Anchored Successfully</span>
                   </div>
                   <p className="text-[11px]">
-                    Bit {selectedRevokeCred.bitstringIndex} set to 1. Advanced to Status Epoch {revokeSuccess.epoch}.
+                    Status List 2021 bit flipped to 1. On-chain epoch #{revokeSuccess.epoch} anchored to Sepolia registry.
                   </p>
                   {revokeSuccess.onChainTxHash && (
-                    <div className="text-[10px] font-mono break-all text-muted-foreground pt-1">
-                      Tx: {revokeSuccess.onChainTxHash}
-                    </div>
+                    <a
+                      href={`https://sepolia.etherscan.io/tx/${revokeSuccess.onChainTxHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-mono text-[10px] text-emerald-700 dark:text-emerald-300 hover:underline"
+                    >
+                      <span>Tx: {revokeSuccess.onChainTxHash.slice(0, 16)}...</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   )}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="p-2.5 rounded-md bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-[11px]">
-                    <p className="font-semibold mb-0.5">Cryptographic Notice:</p>
-                    <p>
-                      This updates the compressed bitstring with $O(1)$ scaling and commits a new SHA-256 digest on-chain. Public verifiers will immediately report this credential as <strong>REVOKED</strong> (Metric M6 latency &lt; 1s).
-                    </p>
-                  </div>
-
+                <>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-foreground">
-                      Reason for Revocation
+                    <label className="text-xs font-semibold text-foreground" htmlFor="revoke-reason">
+                      Revocation Reason (Recorded in Immutable Audit Log)
                     </label>
                     <Input
-                      placeholder="e.g. Academic dishonesty, Administrative error, Course incomplete"
+                      id="revoke-reason"
                       value={revokeReason}
                       onChange={(e) => setRevokeReason(e.target.value)}
+                      placeholder="e.g. Course requirements not completed / Administrative error"
                       className="text-xs"
                     />
                   </div>
 
                   {revokeError && (
-                    <div className="p-2.5 rounded bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-200 text-xs flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{revokeError}</span>
+                    <div className="p-2.5 rounded-lg bg-rose-50 text-rose-800 border border-rose-200 text-xs">
+                      {revokeError}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
-            <CardFooter className="flex justify-end gap-2 border-t pt-3">
+            <CardFooter className="flex items-center justify-end gap-2 border-t pt-3">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setSelectedRevokeCred(null);
-                  setRevokeSuccess(null);
-                  setRevokeError(null);
-                }}
+                onClick={() => setSelectedRevokeCred(null)}
+                disabled={revokeLoading}
               >
-                {revokeSuccess ? "Done" : "Cancel"}
+                {revokeSuccess ? "Close" : "Cancel"}
               </Button>
               {!revokeSuccess && (
                 <Button
@@ -856,10 +868,10 @@ export default function CertificatesPage({
                   variant="destructive"
                   onClick={handleExecuteRevocation}
                   disabled={revokeLoading}
-                  className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
+                  className="gap-1.5"
                 >
-                  <Ban className={`h-3.5 w-3.5 ${revokeLoading ? "animate-spin" : ""}`} />
-                  {revokeLoading ? "Revoking & Anchoring..." : "Confirm Revocation"}
+                  <Ban className="h-3.5 w-3.5" />
+                  <span>{revokeLoading ? "Executing Revocation..." : "Confirm Irrevocable Revocation"}</span>
                 </Button>
               )}
             </CardFooter>

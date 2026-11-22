@@ -22,6 +22,12 @@ import {
   Sparkles,
   ShieldCheck,
   ExternalLink,
+  Layers,
+  Cpu,
+  FileText,
+  Clock,
+  ChevronRight,
+  X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -104,7 +110,7 @@ export default function BatchesPage({
           setSelectedTemplateId(tmplJson.data[0].id);
         }
       }
-    } catch (err: any) {
+    } catch {
       setErrorMsg("Failed to load batches or templates.");
     } finally {
       setLoadingBatches(false);
@@ -296,8 +302,6 @@ export default function BatchesPage({
           `Successfully generated ${json.data.totalProcessed} certificates for Batch ${json.data.batchNumber}! Print-ready PDFs and bulk ZIP archive are ready. Claim links have been downloaded.`
         );
 
-        // Workstream 3 (Option A): Immediate authenticated delivery
-        // Download claim links CSV directly from the authenticated batch processing response
         if (json.data.claimLinks && json.data.claimLinks.length > 0 && typeof window !== "undefined") {
           try {
             const csvHeader = "Recipient Name,Recipient Email,Certificate Number,Claim URL\n";
@@ -317,7 +321,7 @@ export default function BatchesPage({
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
           } catch {
-            // Non-blocking in case of restricted environment
+            // Non-blocking
           }
         }
 
@@ -389,6 +393,15 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
     document.body.removeChild(link);
   };
 
+  // Metrics summary
+  const stats = React.useMemo(() => {
+    const total = batches.length;
+    const anchored = batches.filter((b) => b.status === "ANCHORED").length;
+    const generated = batches.filter((b) => b.status === "GENERATED").length;
+    const totalRecipients = batches.reduce((acc, b) => acc + (b.validCount || 0), 0);
+    return { total, anchored, generated, totalRecipients };
+  }, [batches]);
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Top Header */}
@@ -398,31 +411,34 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
             <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
               Spreadsheet Ingestion & Batches
             </h1>
-            <Badge variant="outline" className="border-primary/40 text-primary">
-              Module C
+            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+              <Sparkles className="h-3 w-3" />
+              Batch Engine
             </Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-sm">
-            Bulk certificate ingestion engine with RFC 4180 parsing, SEC-07 formula injection sanitization, and collision-safe numbering.
+            High-volume certificate ingestion engine with RFC 4180 parsing, SEC-07 formula injection sanitization, and Merkle root anchoring.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           {viewMode === "list" ? (
             <>
-              <Button variant="outline" size="sm" onClick={downloadSampleCSV} className="gap-2">
-                <Download className="h-4 w-4" />
-                Sample CSV
+              <Button variant="outline" size="sm" onClick={downloadSampleCSV} className="gap-2 text-xs">
+                <Download className="h-3.5 w-3.5" />
+                <span>Sample CSV</span>
               </Button>
               <Button
+                variant="brand"
+                size="sm"
                 onClick={() => {
                   setViewMode("wizard");
                   setCurrentStep("upload");
                 }}
-                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                className="gap-2 text-xs shadow-sm"
               >
-                <Upload className="h-4 w-4" />
-                New Spreadsheet Import
+                <Upload className="h-3.5 w-3.5" />
+                <span>New Spreadsheet Import</span>
               </Button>
             </>
           ) : (
@@ -433,10 +449,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                 setViewMode("list");
                 setCurrentStep("upload");
               }}
-              className="gap-2"
+              className="gap-2 text-xs"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Batches
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Back to Batches</span>
             </Button>
           )}
         </div>
@@ -444,20 +460,20 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
 
       {/* Notifications */}
       {errorMsg && (
-        <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-4 text-destructive flex items-center gap-3 text-sm">
-          <AlertCircle className="h-5 w-5 shrink-0" />
-          <div className="flex-1">{errorMsg}</div>
-          <Button variant="ghost" size="sm" onClick={() => setErrorMsg(null)} className="h-7 px-2">
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-destructive flex items-center gap-3 text-xs">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="flex-1 font-medium">{errorMsg}</div>
+          <Button variant="ghost" size="sm" onClick={() => setErrorMsg(null)} className="h-6 px-2 text-xs">
             Dismiss
           </Button>
         </div>
       )}
 
       {successMsg && (
-        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-4 text-emerald-600 dark:text-emerald-400 flex items-center gap-3 text-sm">
-          <CheckCircle2 className="h-5 w-5 shrink-0" />
-          <div className="flex-1">{successMsg}</div>
-          <Button variant="ghost" size="sm" onClick={() => setSuccessMsg(null)} className="h-7 px-2">
+        <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-emerald-700 dark:text-emerald-400 flex items-center gap-3 text-xs">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          <div className="flex-1 font-medium">{successMsg}</div>
+          <Button variant="ghost" size="sm" onClick={() => setSuccessMsg(null)} className="h-6 px-2 text-xs">
             Dismiss
           </Button>
         </div>
@@ -468,31 +484,81 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
       {/* ============================================================== */}
       {viewMode === "list" && (
         <div className="space-y-6">
+          {/* Executive Metrics Overview */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-primary/40 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Total Batches
+                </span>
+                <Layers className="h-4 w-4 text-primary" />
+              </div>
+              <p className="text-2xl font-bold font-mono text-foreground mt-2">{stats.total}</p>
+              <span className="text-[10px] text-muted-foreground">{stats.generated + stats.anchored} ready or anchored</span>
+            </Card>
+
+            <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-indigo-500/40 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Sepolia Anchored
+                </span>
+                <Cpu className="h-4 w-4 text-indigo-500" />
+              </div>
+              <p className="text-2xl font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-2">{stats.anchored}</p>
+              <span className="text-[10px] text-muted-foreground">Immutable blockchain commitments</span>
+            </Card>
+
+            <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-emerald-500/40 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Recipients Processed
+                </span>
+                <Users className="h-4 w-4 text-emerald-500" />
+              </div>
+              <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-2">{stats.totalRecipients}</p>
+              <span className="text-[10px] text-muted-foreground">Verifiable credentials minted</span>
+            </Card>
+
+            <Card className="p-4 bg-muted/20 border-border shadow-xs hover:border-amber-500/40 transition-colors">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  SEC-07 Threat Defense
+                </span>
+                <ShieldAlert className="h-4 w-4 text-amber-500" />
+              </div>
+              <p className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-2">Active</p>
+              <span className="text-[10px] text-muted-foreground">Formula sanitization enabled</span>
+            </Card>
+          </div>
+
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold tracking-tight text-foreground">
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
               Institutional Issuance Batches
             </h2>
             <Button variant="ghost" size="sm" onClick={loadInitialData} disabled={loadingBatches} className="gap-2 text-xs">
               <RefreshCw className={`h-3.5 w-3.5 ${loadingBatches ? "animate-spin" : ""}`} />
-              Refresh
+              <span>Refresh</span>
             </Button>
           </div>
 
           {loadingBatches ? (
-            <div className="py-16 text-center text-muted-foreground animate-pulse">
-              Loading batches...
+            <div className="py-16 text-center text-xs text-muted-foreground animate-pulse">
+              <RefreshCw className="h-5 w-5 animate-spin mx-auto mb-2 text-primary" />
+              Loading batch records...
             </div>
           ) : batches.length === 0 ? (
             <Card className="border-dashed py-16 text-center">
               <CardContent className="space-y-4">
                 <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground/60" />
                 <div className="space-y-1">
-                  <h3 className="font-semibold text-lg">No issuance batches created yet</h3>
-                  <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  <h3 className="font-semibold text-base">No issuance batches created yet</h3>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                     Upload a recipient CSV or Excel spreadsheet to generate certificates and anchor credentials to Ethereum.
                   </p>
                 </div>
                 <Button
+                  variant="brand"
+                  size="sm"
                   onClick={() => {
                     setViewMode("wizard");
                     setCurrentStep("upload");
@@ -500,48 +566,48 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                   className="gap-2"
                 >
                   <Upload className="h-4 w-4" />
-                  Upload First Spreadsheet
+                  <span>Upload First Spreadsheet</span>
                 </Button>
               </CardContent>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {batches.map((b) => (
-                <Card key={b.id} className="hover:border-primary/50 transition-all flex flex-col justify-between">
+                <Card key={b.id} className="hover:border-primary/50 transition-all flex flex-col justify-between shadow-xs">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                      <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-muted text-foreground">
                         {b.batchNumber}
                       </span>
                       <Badge
                         variant={
                           b.status === "ANCHORED"
-                            ? "default"
+                            ? "verified"
                             : b.status === "DRAFT"
                             ? "secondary"
                             : b.status === "FAILED"
                             ? "destructive"
-                            : "outline"
+                            : "default"
                         }
                       >
                         {b.status}
                       </Badge>
                     </div>
-                    <CardTitle className="text-lg line-clamp-1 mt-2">{b.title}</CardTitle>
+                    <CardTitle className="text-base line-clamp-1 mt-2 font-bold">{b.title}</CardTitle>
                     <CardDescription className="text-xs">
                       Created on {new Date(b.createdAt).toLocaleDateString()}
                     </CardDescription>
                   </CardHeader>
 
-                  <CardContent className="pb-3 text-sm space-y-2">
-                    <div className="flex items-center justify-between py-1 border-b border-border/50 text-xs">
+                  <CardContent className="pb-3 text-xs space-y-2">
+                    <div className="flex items-center justify-between py-1 border-b border-border/50">
                       <span className="text-muted-foreground">Valid Recipients:</span>
                       <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
                         {b.validCount}
                       </span>
                     </div>
                     {b.invalidCount > 0 && (
-                      <div className="flex items-center justify-between py-1 border-b border-border/50 text-xs">
+                      <div className="flex items-center justify-between py-1 border-b border-border/50">
                         <span className="text-muted-foreground">Skipped Rows:</span>
                         <span className="font-semibold text-amber-600 dark:text-amber-400 font-mono">
                           {b.invalidCount}
@@ -549,9 +615,11 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       </div>
                     )}
                     {b.merkleRoot && (
-                      <div className="text-xs space-y-0.5">
+                      <div className="space-y-0.5 pt-1">
                         <span className="text-muted-foreground text-[10px] uppercase font-semibold">Merkle Root:</span>
-                        <p className="font-mono text-[11px] text-muted-foreground truncate">{b.merkleRoot}</p>
+                        <p className="font-mono text-[10px] text-muted-foreground truncate bg-muted/40 p-1 rounded" title={b.merkleRoot}>
+                          {b.merkleRoot}
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -565,7 +633,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                         className="gap-1.5 h-8 text-xs"
                       >
                         <Eye className="h-3.5 w-3.5" />
-                        View
+                        <span>View</span>
                       </Button>
 
                       {b.status === "DRAFT" && (
@@ -583,12 +651,13 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     {b.status === "DRAFT" && (
                       <Button
                         size="sm"
+                        variant="brand"
                         onClick={() => handleProcessBatch(b.id)}
                         disabled={processingBatchId === b.id}
-                        className="h-8 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
+                        className="h-8 text-xs gap-1.5 font-medium"
                       >
                         <Sparkles className={`h-3.5 w-3.5 ${processingBatchId === b.id ? "animate-spin" : ""}`} />
-                        {processingBatchId === b.id ? "Generating..." : "Generate Certificates"}
+                        <span>{processingBatchId === b.id ? "Generating..." : "Generate Certificates"}</span>
                       </Button>
                     )}
 
@@ -601,7 +670,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                           className="h-8 text-xs gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
                         >
                           <ShieldCheck className={`h-3.5 w-3.5 ${anchoringBatchId === b.id ? "animate-spin" : ""}`} />
-                          {anchoringBatchId === b.id ? "Anchoring..." : "Anchor to Sepolia"}
+                          <span>{anchoringBatchId === b.id ? "Anchoring..." : "Anchor to Sepolia"}</span>
                         </Button>
                         <a href={`/api/v1/tenants/${slug}/batches/${b.id}/download-zip`} target="_blank" rel="noreferrer">
                           <Button
@@ -610,7 +679,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                             className="h-8 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10 font-medium"
                           >
                             <Download className="h-3.5 w-3.5" />
-                            ZIP
+                            <span>ZIP</span>
                           </Button>
                         </a>
                       </div>
@@ -626,7 +695,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                             className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:underline"
                           >
                             <ExternalLink className="h-3 w-3" />
-                            Sepolia Tx
+                            <span>Sepolia Tx</span>
                           </a>
                         )}
                         <a href={`/api/v1/tenants/${slug}/batches/${b.id}/download-zip`} target="_blank" rel="noreferrer">
@@ -636,7 +705,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                             className="h-8 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10 font-medium"
                           >
                             <Download className="h-3.5 w-3.5" />
-                            ZIP
+                            <span>ZIP</span>
                           </Button>
                         </a>
                       </div>
@@ -649,53 +718,62 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
 
           {/* Details Modal */}
           {selectedBatchDetails && (
-            <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <Card className="w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl">
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <Card className="w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl animate-in fade-in-50 zoom-in-95">
                 <CardHeader className="border-b border-border pb-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <CardTitle className="text-xl font-bold">{selectedBatchDetails.title}</CardTitle>
-                      <CardDescription className="font-mono text-xs mt-1">
+                      <CardTitle className="text-lg font-bold">{selectedBatchDetails.title}</CardTitle>
+                      <CardDescription className="font-mono text-xs mt-0.5">
                         Batch: {selectedBatchDetails.batchNumber} • Status: {selectedBatchDetails.status}
                       </CardDescription>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedBatchDetails(null)}>
-                      ✕
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedBatchDetails(null)} className="h-8 w-8 p-0">
+                      <X className="h-4 w-4" />
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent className="overflow-y-auto p-6 space-y-4 flex-1">
-                  <div className="grid grid-cols-2 gap-4 text-sm bg-muted/40 p-4 rounded-lg">
+                <CardContent className="overflow-y-auto p-6 space-y-4 flex-1 text-xs">
+                  <div className="grid grid-cols-2 gap-4 bg-muted/40 p-4 rounded-xl border border-border">
                     <div>
-                      <p className="text-xs text-muted-foreground">Total Recipient Count</p>
-                      <p className="text-xl font-bold font-mono">{selectedBatchDetails.validCount}</p>
+                      <p className="text-xs text-muted-foreground">Total Valid Recipients</p>
+                      <p className="text-xl font-bold font-mono text-foreground">{selectedBatchDetails.validCount}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Creation Timestamp</p>
-                      <p className="text-sm font-medium">{new Date(selectedBatchDetails.createdAt).toLocaleString()}</p>
+                      <p className="text-xs font-medium text-foreground mt-1">{new Date(selectedBatchDetails.createdAt).toLocaleString()}</p>
                     </div>
                   </div>
 
+                  {selectedBatchDetails.merkleRoot && (
+                    <div className="space-y-1">
+                      <span className="font-semibold text-foreground">32-Byte Keccak-256 Merkle Root</span>
+                      <p className="p-2.5 rounded bg-muted font-mono text-[11px] break-all border border-border">
+                        {selectedBatchDetails.merkleRoot}
+                      </p>
+                    </div>
+                  )}
+
                   <div>
-                    <h4 className="text-sm font-semibold mb-2">Staged Recipients Preview</h4>
+                    <h4 className="text-xs font-semibold mb-2">Staged Recipients Sample</h4>
                     {selectedBatchDetails.stagedRecipients && selectedBatchDetails.stagedRecipients.length > 0 ? (
-                      <div className="border border-border rounded-md overflow-hidden text-xs">
+                      <div className="border border-border rounded-lg overflow-hidden text-xs">
                         <table className="w-full text-left">
-                          <thead className="bg-muted text-muted-foreground">
+                          <thead className="bg-muted text-muted-foreground uppercase text-[10px]">
                             <tr>
-                              <th className="p-2">Name</th>
-                              <th className="p-2">Email</th>
-                              <th className="p-2">Certificate No</th>
-                              <th className="p-2">Status</th>
+                              <th className="p-2.5">Name</th>
+                              <th className="p-2.5">Email</th>
+                              <th className="p-2.5">Certificate Preview</th>
+                              <th className="p-2.5">Status</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border">
                             {selectedBatchDetails.stagedRecipients.slice(0, 15).map((r, i) => (
                               <tr key={i} className="hover:bg-muted/30">
-                                <td className="p-2 font-medium">{r.fullName}</td>
-                                <td className="p-2 font-mono text-muted-foreground">{r.email}</td>
-                                <td className="p-2 font-mono">{r.certificateNumberPreview}</td>
-                                <td className="p-2">
+                                <td className="p-2.5 font-medium">{r.fullName}</td>
+                                <td className="p-2.5 font-mono text-muted-foreground">{r.email}</td>
+                                <td className="p-2.5 font-mono text-primary font-bold">{r.certificateNumberPreview}</td>
+                                <td className="p-2.5">
                                   <Badge variant={r.status === "VALID" ? "default" : "secondary"}>
                                     {r.status}
                                   </Badge>
@@ -711,7 +789,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                   </div>
                 </CardContent>
                 <CardFooter className="border-t border-border p-4 flex items-center justify-between gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setSelectedBatchDetails(null)}>
+                  <Button variant="outline" size="sm" onClick={() => setSelectedBatchDetails(null)} className="text-xs">
                     Close
                   </Button>
 
@@ -719,12 +797,13 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     {selectedBatchDetails.status === "DRAFT" && (
                       <Button
                         size="sm"
+                        variant="brand"
                         onClick={() => handleProcessBatch(selectedBatchDetails.id)}
                         disabled={processingBatchId === selectedBatchDetails.id}
-                        className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
+                        className="gap-1.5 text-xs font-semibold"
                       >
                         <Sparkles className={`h-3.5 w-3.5 ${processingBatchId === selectedBatchDetails.id ? "animate-spin" : ""}`} />
-                        {processingBatchId === selectedBatchDetails.id ? "Generating..." : "Generate Certificates"}
+                        <span>{processingBatchId === selectedBatchDetails.id ? "Generating..." : "Generate Certificates"}</span>
                       </Button>
                     )}
 
@@ -743,7 +822,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                             className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
                           >
                             <ShieldCheck className={`h-3.5 w-3.5 ${anchoringBatchId === selectedBatchDetails.id ? "animate-spin" : ""}`} />
-                            {anchoringBatchId === selectedBatchDetails.id ? "Anchoring..." : "Anchor to Sepolia"}
+                            <span>{anchoringBatchId === selectedBatchDetails.id ? "Anchoring..." : "Anchor to Sepolia"}</span>
                           </Button>
                         )}
                         {selectedBatchDetails.status === "ANCHORED" && selectedBatchDetails.onChainTxHash && (
@@ -754,7 +833,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                             className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-1.5 rounded bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:underline"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
-                            Sepolia Explorer
+                            <span>Sepolia Explorer</span>
                           </a>
                         )}
                         <a
@@ -764,7 +843,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                         >
                           <Button size="sm" className="gap-1.5 text-xs">
                             <Download className="h-3.5 w-3.5" />
-                            Download ZIP
+                            <span>Download ZIP</span>
                           </Button>
                         </a>
                       </>
@@ -813,12 +892,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
             })}
           </div>
 
-          {/* ------------------------------------------------------------ */}
-          {/* STEP 1: UPLOAD                                               */}
-          {/* ------------------------------------------------------------ */}
+          {/* STEP 1: UPLOAD */}
           {currentStep === "upload" && (
             <div className="space-y-6">
-              <Card>
+              <Card className="border shadow-xs">
                 <CardHeader>
                   <CardTitle className="text-xl">Upload Recipient Spreadsheet</CardTitle>
                   <CardDescription>
@@ -834,7 +911,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       const file = e.dataTransfer.files[0];
                       if (file) handleFileUpload(file);
                     }}
-                    className="border-2 border-dashed border-border hover:border-primary/60 rounded-xl p-12 text-center flex flex-col items-center justify-center cursor-pointer transition-colors bg-muted/20 hover:bg-muted/40"
+                    className="border-2 border-dashed border-border hover:border-primary/60 rounded-2xl p-12 text-center flex flex-col items-center justify-center cursor-pointer transition-colors bg-muted/20 hover:bg-muted/40"
                     onClick={() => document.getElementById("spreadsheet-file-input")?.click()}
                   >
                     <input
@@ -856,8 +933,8 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     </p>
                   </div>
 
-                  {/* SEC-07 Security Callout */}
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+                  {/* SEC-07 Callout */}
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
                     <ShieldAlert className="h-5 w-5 text-primary shrink-0 mt-0.5" />
                     <div className="text-xs space-y-1 text-muted-foreground">
                       <p className="font-semibold text-foreground">SEC-07 Threat Defense: Formula Injection Sanitization</p>
@@ -871,12 +948,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
             </div>
           )}
 
-          {/* ------------------------------------------------------------ */}
-          {/* STEP 2: COLUMN MAPPING                                       */}
-          {/* ------------------------------------------------------------ */}
+          {/* STEP 2: COLUMN MAPPING */}
           {currentStep === "mapping" && (
             <div className="space-y-6">
-              <Card>
+              <Card className="border shadow-xs">
                 <CardHeader>
                   <CardTitle className="text-xl">Map Spreadsheet Columns to Certificate Fields</CardTitle>
                   <CardDescription>
@@ -954,10 +1029,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       </select>
                     </div>
 
-                    {/* Course/Event Title */}
+                    {/* Course Name */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold uppercase text-foreground">Course / Event Name</label>
+                        <label className="text-xs font-semibold uppercase text-foreground">Course / Program Name</label>
                         {columnMapping.course_name && suggestedMapping.course_name === columnMapping.course_name && (
                           <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40">
                             Auto-matched
@@ -978,10 +1053,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       </select>
                     </div>
 
-                    {/* Grade / Standing */}
+                    {/* Grade / Honor */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
-                        <label className="text-xs font-semibold uppercase text-foreground">Grade / Honor</label>
+                        <label className="text-xs font-semibold uppercase text-foreground">Final Grade / Honor</label>
                         {columnMapping.grade && suggestedMapping.grade === columnMapping.grade && (
                           <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/40">
                             Auto-matched
@@ -1002,7 +1077,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       </select>
                     </div>
 
-                    {/* Student/External ID */}
+                    {/* Student ID */}
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-semibold uppercase text-foreground">External / Student ID</label>
@@ -1051,10 +1126,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     </div>
                   </div>
 
-                  {/* Raw Data Preview Swatch */}
+                  {/* Sample Parsed Row */}
                   <div className="space-y-2 pt-4 border-t border-border">
                     <p className="text-xs font-semibold text-muted-foreground uppercase">Sample Parsed Row (Row 1):</p>
-                    <div className="p-3 bg-muted/30 rounded-md font-mono text-xs overflow-x-auto">
+                    <div className="p-3 bg-muted/30 rounded-lg font-mono text-xs overflow-x-auto">
                       {parsedRows.length > 0 ? (
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                           {Object.entries(parsedRows[0]).map(([col, val]) => (
@@ -1075,8 +1150,8 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back
                   </Button>
-                  <Button onClick={handleValidateBatch} disabled={isProcessing} className="gap-2">
-                    {isProcessing ? "Validating..." : "Validate Records"}
+                  <Button variant="brand" onClick={handleValidateBatch} disabled={isProcessing} className="gap-2">
+                    <span>{isProcessing ? "Validating..." : "Validate Records"}</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </CardFooter>
@@ -1084,72 +1159,54 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
             </div>
           )}
 
-          {/* ------------------------------------------------------------ */}
-          {/* STEP 3: DIAGNOSTICS & DUPLICATE REVIEW                       */}
-          {/* ------------------------------------------------------------ */}
+          {/* STEP 3: DIAGNOSTICS */}
           {currentStep === "validation" && report && (
             <div className="space-y-6">
               {/* Metric Breakdown Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Card className="bg-emerald-500/5 border-emerald-500/20">
-                  <CardHeader className="pb-1 pt-4">
-                    <CardDescription className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase">
-                      Valid Records
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                      {report.validCount}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-3 text-xs text-muted-foreground">
-                    Ready for issuance
-                  </CardContent>
+                <Card className="bg-emerald-500/5 border-emerald-500/20 p-4">
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold uppercase block">
+                    Valid Records
+                  </span>
+                  <p className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+                    {report.validCount}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">Ready for issuance</span>
                 </Card>
 
-                <Card className="bg-amber-500/5 border-amber-500/20">
-                  <CardHeader className="pb-1 pt-4">
-                    <CardDescription className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase">
-                      Duplicate Rows
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400">
-                      {report.duplicateCount}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-3 text-xs text-muted-foreground">
-                    In-file or existing email
-                  </CardContent>
+                <Card className="bg-amber-500/5 border-amber-500/20 p-4">
+                  <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold uppercase block">
+                    Duplicate Rows
+                  </span>
+                  <p className="text-2xl font-bold font-mono text-amber-600 dark:text-amber-400 mt-1">
+                    {report.duplicateCount}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">In-file or existing email</span>
                 </Card>
 
-                <Card className="bg-destructive/5 border-destructive/20">
-                  <CardHeader className="pb-1 pt-4">
-                    <CardDescription className="text-xs text-destructive font-semibold uppercase">
-                      Invalid Rows
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-bold font-mono text-destructive">
-                      {report.invalidCount}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-3 text-xs text-muted-foreground">
-                    Missing or bad data
-                  </CardContent>
+                <Card className="bg-destructive/5 border-destructive/20 p-4">
+                  <span className="text-xs text-destructive font-semibold uppercase block">
+                    Invalid Rows
+                  </span>
+                  <p className="text-2xl font-bold font-mono text-destructive mt-1">
+                    {report.invalidCount}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">Missing or bad data</span>
                 </Card>
 
-                <Card className="bg-primary/5 border-primary/20">
-                  <CardHeader className="pb-1 pt-4">
-                    <CardDescription className="text-xs text-primary font-semibold uppercase">
-                      Security Alerts
-                    </CardDescription>
-                    <CardTitle className="text-2xl font-bold font-mono text-primary">
-                      {report.securityAlertCount}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pb-3 text-xs text-muted-foreground">
-                    Formulas neutralized
-                  </CardContent>
+                <Card className="bg-primary/5 border-primary/20 p-4">
+                  <span className="text-xs text-primary font-semibold uppercase block">
+                    Security Alerts
+                  </span>
+                  <p className="text-2xl font-bold font-mono text-primary mt-1">
+                    {report.securityAlertCount}
+                  </p>
+                  <span className="text-[10px] text-muted-foreground">Formulas neutralized</span>
                 </Card>
               </div>
 
               {/* Diagnostic Table */}
-              <Card>
+              <Card className="border shadow-xs">
                 <CardHeader className="pb-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div>
@@ -1159,7 +1216,6 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       </CardDescription>
                     </div>
 
-                    {/* Filter Pills */}
                     <div className="flex items-center gap-1.5">
                       {(["ALL", "VALID", "INVALID", "DUPLICATE"] as const).map((st) => (
                         <Button
@@ -1179,13 +1235,13 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                 <CardContent className="p-0">
                   <div className="border-t border-border overflow-x-auto max-h-[350px]">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-muted text-muted-foreground uppercase sticky top-0">
+                      <thead className="bg-muted text-muted-foreground uppercase sticky top-0 text-[10px]">
                         <tr>
                           <th className="p-2.5">Row</th>
                           <th className="p-2.5">Status</th>
                           <th className="p-2.5">Recipient Name</th>
                           <th className="p-2.5">Email Address</th>
-                          <th className="p-2.5">Certificate No Preview</th>
+                          <th className="p-2.5">Certificate Preview</th>
                           <th className="p-2.5">Diagnostic Details</th>
                         </tr>
                       </thead>
@@ -1199,9 +1255,9 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                                 <Badge
                                   variant={
                                     r.status === "VALID"
-                                      ? "default"
+                                      ? "verified"
                                       : r.status === "DUPLICATE"
-                                      ? "secondary"
+                                      ? "warning"
                                       : "destructive"
                                   }
                                 >
@@ -1214,7 +1270,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                                 </span>
                               </td>
                               <td className="p-2.5 font-mono text-muted-foreground">{r.recipientEmail || "—"}</td>
-                              <td className="p-2.5 font-mono text-[11px]">{r.certificateNumberPreview}</td>
+                              <td className="p-2.5 font-mono text-[11px] font-bold text-primary">{r.certificateNumberPreview}</td>
                               <td className="p-2.5 text-muted-foreground">
                                 {r.errors.length > 0 ? (
                                   <span className="text-destructive font-medium">
@@ -1239,11 +1295,12 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     Back to Mapping
                   </Button>
                   <Button
+                    variant="brand"
                     onClick={() => setCurrentStep("preview")}
                     disabled={!report.summary.canProceed}
                     className="gap-2"
                   >
-                    Proceed to Preview
+                    <span>Proceed to Preview</span>
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </CardFooter>
@@ -1251,12 +1308,10 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
             </div>
           )}
 
-          {/* ------------------------------------------------------------ */}
-          {/* STEP 4: GENERATION PREVIEW & STAGE BATCH                     */}
-          {/* ------------------------------------------------------------ */}
+          {/* STEP 4: PREVIEW & STAGE */}
           {currentStep === "preview" && report && (
             <div className="space-y-6">
-              <Card>
+              <Card className="border shadow-xs">
                 <CardHeader>
                   <CardTitle className="text-xl">Stage Batch & Preview Credentials</CardTitle>
                   <CardDescription>
@@ -1271,7 +1326,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       value={batchTitle}
                       onChange={(e) => setBatchTitle(e.target.value)}
                       placeholder="e.g. 2026 Graduating Honors Cohort"
-                      className="max-w-md"
+                      className="max-w-md text-xs"
                     />
                   </div>
 
@@ -1281,7 +1336,7 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                       Sample Generated Credential Preview:
                     </label>
                     {report.rows.filter((r) => r.status === "VALID").length > 0 ? (
-                      <div className="border border-border/80 rounded-xl p-6 bg-gradient-to-br from-card to-muted/40 shadow-sm max-w-2xl space-y-4">
+                      <div className="border border-border rounded-xl p-6 bg-gradient-to-br from-card to-muted/40 shadow-sm max-w-2xl space-y-4">
                         <div className="flex justify-between items-start border-b border-border pb-3">
                           <div>
                             <span className="text-[10px] uppercase font-bold tracking-wider text-primary">
@@ -1323,11 +1378,12 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
                     Back to Diagnostics
                   </Button>
                   <Button
+                    variant="brand"
                     onClick={handleStageBatch}
                     disabled={isProcessing || report.validCount === 0}
-                    className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                    className="gap-2 font-semibold"
                   >
-                    {isProcessing ? "Staging Batch..." : `Stage Batch (${report.validCount} Valid Recipients)`}
+                    <span>{isProcessing ? "Staging Batch..." : `Stage Batch (${report.validCount} Valid Recipients)`}</span>
                     <Check className="h-4 w-4" />
                   </Button>
                 </CardFooter>
