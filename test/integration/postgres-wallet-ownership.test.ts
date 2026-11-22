@@ -153,75 +153,13 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     }
 
     if (isPostgresLive) {
-      // 1. Ensure partial unique index exists in PostgreSQL test container
-      await prisma.$executeRawUnsafe(`
-        CREATE UNIQUE INDEX IF NOT EXISTS "claim_invitations_one_consumed_owner_per_credential_uq"
-        ON "claim_invitations" ("credentialId")
-        WHERE "consumedAt" IS NOT NULL
-          AND "claimedByUserId" IS NOT NULL;
-      `);
-
-      // 1b. Ensure ownership monotonicity & paired-state function exists (single command)
-      await prisma.$executeRawUnsafe(`
-        CREATE OR REPLACE FUNCTION trg_enforce_claim_invitation_monotonicity()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          -- Invariant 0: Paired ownership-state invariant (both NULL or both NOT NULL)
-          IF (NEW."consumedAt" IS NULL) IS DISTINCT FROM (NEW."claimedByUserId" IS NULL) THEN
-            RAISE EXCEPTION 'claim_invitations ownership state violation: consumedAt and claimedByUserId must both be NULL or both be NOT NULL (paired ownership state)'
-              USING ERRCODE = '23514';
-          END IF;
-
-          -- The following immutability rules apply only to UPDATE operations (never access OLD on INSERT)
-          IF TG_OP = 'UPDATE' THEN
-            IF OLD."credentialId" IS DISTINCT FROM NEW."credentialId" THEN
-              RAISE EXCEPTION 'claim_invitations ownership violation: credentialId is immutable once created (attempted to change % to %)',
-                OLD."credentialId", NEW."credentialId"
-                USING ERRCODE = '23514';
-            END IF;
-
-            IF OLD."consumedAt" IS NOT NULL THEN
-              IF NEW."consumedAt" IS NULL THEN
-                RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt cannot be reset to NULL once consumed'
-                  USING ERRCODE = '23514';
-              END IF;
-              IF OLD."consumedAt" IS DISTINCT FROM NEW."consumedAt" THEN
-                RAISE EXCEPTION 'claim_invitations ownership violation: consumedAt is immutable once set (attempted to change % to %)',
-                  OLD."consumedAt", NEW."consumedAt"
-                  USING ERRCODE = '23514';
-              END IF;
-            END IF;
-
-            IF OLD."claimedByUserId" IS NOT NULL THEN
-              IF NEW."claimedByUserId" IS NULL THEN
-                RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId cannot be cleared once assigned'
-                  USING ERRCODE = '23514';
-              END IF;
-              IF OLD."claimedByUserId" IS DISTINCT FROM NEW."claimedByUserId" THEN
-                RAISE EXCEPTION 'claim_invitations ownership violation: claimedByUserId is immutable once assigned (attempted to change % to %)',
-                  OLD."claimedByUserId", NEW."claimedByUserId"
-                  USING ERRCODE = '23514';
-              END IF;
-            END IF;
-          END IF;
-
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql;
-      `);
-
-      // 1c. Ensure trigger is dropped before recreate (separate single command)
-      await prisma.$executeRawUnsafe(`
-        DROP TRIGGER IF EXISTS trg_claim_invitation_monotonicity ON "claim_invitations";
-      `);
-
-      // 1d. Ensure trigger is created on INSERT OR UPDATE (separate single command)
-      await prisma.$executeRawUnsafe(`
-        CREATE TRIGGER trg_claim_invitation_monotonicity
-        BEFORE INSERT OR UPDATE ON "claim_invitations"
-        FOR EACH ROW
-        EXECUTE FUNCTION trg_enforce_claim_invitation_monotonicity();
-      `);
+      // 1. Verify PostgreSQL connectivity via native preflight query
+      const connInfo = await prisma.$queryRaw<any[]>`
+        SELECT current_database(), current_schema(), version()
+      `;
+      if (!connInfo || connInfo.length === 0) {
+        throw new Error("H1.3.3.1 connectivity verification failed: unable to query current_database()");
+      }
 
       // 2. Verify partial unique index exists and is valid in PostgreSQL catalog
       const catalogCheck = await prisma.$queryRaw<any[]>`
@@ -244,7 +182,9 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           AND n.nspname = 'public'
       `;
       if (!catalogCheck || catalogCheck.length === 0) {
-        throw new Error("H1.3.3.1 index verification failed: partial unique index not found in pg_index in schema public");
+        throw new Error(
+          "H1.3.3.1 index verification failed: partial unique index not found in pg_index in schema public. Database objects must be initialized prior to test execution via 'psql -f prisma/sql/h1-3-3-single-owner-index.sql'."
+        );
       }
       if (!catalogCheck[0].indisunique || !catalogCheck[0].indisvalid || !catalogCheck[0].indisready) {
         throw new Error("H1.3.3.1 index verification failed: index is not unique, valid, or ready");
@@ -270,7 +210,7 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         );
       }
 
-      // 3. Verify ownership monotonicity trigger exists, is enabled, and fires BEFORE INSERT OR UPDATE
+      // 3. Verify ownership monotonicity trigger exists, is enabled, and fires BEFORE INSERT OR UPDATE OR DELETE
       const triggerCheck = await prisma.$queryRaw<any[]>`
         SELECT t.tgenabled, t.tgtype, p.proname
         FROM pg_trigger t
@@ -282,7 +222,9 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           AND n.nspname = 'public';
       `;
       if (!triggerCheck || triggerCheck.length === 0) {
-        throw new Error("H1.3.3.1 trigger verification failed: trigger not found in schema public");
+        throw new Error(
+          "H1.3.3.1 trigger verification failed: trigger not found in schema public. Database objects must be initialized prior to test execution via 'psql -f prisma/sql/h1-3-3-ownership-monotonicity-trigger.sql'."
+        );
       }
       if (triggerCheck[0].tgenabled !== "O") {
         throw new Error(`H1.3.3.1 trigger verification failed: trigger not enabled (${triggerCheck[0].tgenabled})`);
@@ -291,8 +233,39 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         throw new Error(`H1.3.3.1 trigger verification failed: proc is ${triggerCheck[0].proname}`);
       }
       const tgtype = Number(triggerCheck[0].tgtype);
-      if ((tgtype & 1) === 0 || (tgtype & 2) === 0 || (tgtype & 4) === 0 || (tgtype & 16) === 0) {
+      if (
+        (tgtype & 1) === 0 ||
+        (tgtype & 2) === 0 ||
+        (tgtype & 4) === 0 ||
+        (tgtype & 8) === 0 ||
+        (tgtype & 16) === 0
+      ) {
         throw new Error(`H1.3.3.1 trigger verification failed: trigger flags mismatch (tgtype = ${tgtype})`);
+      }
+
+      // 4. Verify expected schema columns on claim_invitations
+      const schemaColumns = await prisma.$queryRaw<any[]>`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'claim_invitations'
+      `;
+      const colNames = schemaColumns.map((c) => c.column_name);
+      const requiredCols = [
+        "id",
+        "tokenHash",
+        "credentialId",
+        "certificateNumber",
+        "recipientEmail",
+        "tenantId",
+        "expiresAt",
+        "consumedAt",
+        "claimedByUserId",
+        "claimedByHolderDid",
+      ];
+      for (const col of requiredCols) {
+        if (!colNames.includes(col)) {
+          throw new Error(`H1.3.3.1 schema verification failed: required column "${col}" missing from public.claim_invitations`);
+        }
       }
 
       const nowTs = Date.now();
@@ -458,8 +431,8 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         },
       });
 
-      // Claimed invitation for Alice
-      await prisma.claimInvitation.create({
+      // Claimed invitation for Alice (created as unclaimed then claimed via update)
+      const invAlice = await prisma.claimInvitation.create({
         data: {
           tokenHash: crypto.createHash("sha256").update(`token_alice_${nowTs}`).digest("hex"),
           credentialId: credAlice.credentialId,
@@ -467,6 +440,14 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           recipientEmail: aliceEmail,
           tenantId,
           expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: null,
+          claimedByUserId: null,
+          claimedByHolderDid: null,
+        },
+      });
+      await prisma.claimInvitation.update({
+        where: { id: invAlice.id },
+        data: {
           consumedAt: new Date(),
           claimedByUserId: userIdAlice,
           claimedByHolderDid: "did:key:alice_holder_did",
@@ -508,8 +489,8 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         },
       });
 
-      // Claimed invitation for Bob
-      await prisma.claimInvitation.create({
+      // Claimed invitation for Bob (created as unclaimed then claimed via update)
+      const invBob = await prisma.claimInvitation.create({
         data: {
           tokenHash: crypto.createHash("sha256").update(`token_bob_${nowTs}`).digest("hex"),
           credentialId: credBob.credentialId,
@@ -517,6 +498,14 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           recipientEmail: bobEmail,
           tenantId,
           expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: null,
+          claimedByUserId: null,
+          claimedByHolderDid: null,
+        },
+      });
+      await prisma.claimInvitation.update({
+        where: { id: invBob.id },
+        data: {
           consumedAt: new Date(),
           claimedByUserId: userIdBob,
           claimedByHolderDid: "did:key:bob_holder_did",
@@ -601,7 +590,7 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
         },
       });
 
-      await prisma.claimInvitation.create({
+      const invForeign = await prisma.claimInvitation.create({
         data: {
           tokenHash: crypto.createHash("sha256").update(`token_foreign_${nowTs}`).digest("hex"),
           credentialId: credForeignTenant.credentialId,
@@ -609,6 +598,13 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
           recipientEmail: "foreign@foreign.edu",
           tenantId: foreignTenantId,
           expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: null,
+          claimedByUserId: null,
+        },
+      });
+      await prisma.claimInvitation.update({
+        where: { id: invForeign.id },
+        data: {
           consumedAt: new Date(),
           claimedByUserId: userIdAlice, // Alice maliciously linked to foreign tenant
         },
@@ -626,67 +622,25 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     if (isPostgresLive) {
       const cleanupErrors: any[] = [];
       try {
-        const testUserIds = [userIdAlice, userIdBob].filter(Boolean);
         const testTenantIds = [tenantId, foreignTenantId].filter(Boolean);
 
+        // 1. Clean up ephemeral challenge nonces created during the tests
         if (createdNonceHashes.length > 0) {
           await prisma.challengeNonce.deleteMany({
             where: { nonceHash: { in: createdNonceHashes } },
           }).catch((e) => cleanupErrors.push(e));
         }
 
+        // 2. Clean up unconsumed invitations ONLY.
+        // Consumed claim invitations, their parent credentials, tenants, and users are deliberately protected
+        // from deletion by trg_claim_invitation_monotonicity and foreign key constraints.
         if (testTenantIds.length > 0) {
           await prisma.claimInvitation.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-        }
-
-        if (testTenantIds.length > 0 || testUserIds.length > 0) {
-          await prisma.auditLog.deleteMany({
             where: {
-              OR: [
-                ...(testTenantIds.length > 0 ? [{ tenantId: { in: testTenantIds } }] : []),
-                ...(testUserIds.length > 0 ? [{ userId: { in: testUserIds } }] : []),
-              ],
+              tenantId: { in: testTenantIds },
+              consumedAt: null,
+              claimedByUserId: null,
             },
-          }).catch((e) => cleanupErrors.push(e));
-        }
-
-        if (testTenantIds.length > 0) {
-          await prisma.credentialRecord.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-
-          await prisma.recipient.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-
-          await prisma.issuanceBatch.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-
-          await prisma.certificateTemplate.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-
-          await prisma.issuerKey.deleteMany({
-            where: { tenantId: { in: testTenantIds } },
-          }).catch((e) => cleanupErrors.push(e));
-        }
-
-        if (testUserIds.length > 0) {
-          await prisma.tenantMembership.deleteMany({
-            where: { userId: { in: testUserIds } },
-          }).catch((e) => cleanupErrors.push(e));
-
-          await prisma.user.deleteMany({
-            where: { id: { in: testUserIds } },
-          }).catch((e) => cleanupErrors.push(e));
-        }
-
-        if (testTenantIds.length > 0) {
-          await prisma.tenant.deleteMany({
-            where: { id: { in: testTenantIds } },
           }).catch((e) => cleanupErrors.push(e));
         }
 
@@ -1298,6 +1252,54 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     expect(invalidUpdateConsumedOnlyError).toBeDefined();
     expect(String(invalidUpdateConsumedOnlyError.message || invalidUpdateConsumedOnlyError)).toMatch(/ownership state violation|paired ownership state|23514/i);
 
+    // 5e. Direct INSERT with both consumedAt and claimedByUserId set must be rejected (SQLSTATE 23514: newly inserted invitations must begin unclaimed)
+    let invalidInsertBothSetError: any = null;
+    try {
+      await prisma.claimInvitation.create({
+        data: {
+          tokenHash: crypto.createHash("sha256").update(`inv_ins_both_${nowTs}`).digest("hex"),
+          credentialId: `urn:uuid:${crypto.randomUUID()}`,
+          certificateNumber: `INVALID-INS-BOTH-${nowTs}`,
+          recipientEmail: "invalid-both@test.edu",
+          tenantId,
+          expiresAt: new Date(Date.now() + 86400000),
+          consumedAt: new Date(),
+          claimedByUserId: userIdAlice,
+        },
+      });
+    } catch (err: any) {
+      invalidInsertBothSetError = err;
+    }
+    expect(invalidInsertBothSetError).toBeDefined();
+    expect(String(invalidInsertBothSetError.message || invalidInsertBothSetError)).toMatch(/initial state violation|ownership state violation|23514/i);
+
+    // 5f. Legitimate pending invitation INSERT (both fields null) succeeds
+    const legitimatePending = await prisma.claimInvitation.create({
+      data: {
+        tokenHash: crypto.createHash("sha256").update(`inv_legit_pending_${nowTs}`).digest("hex"),
+        credentialId: `urn:uuid:${crypto.randomUUID()}`,
+        certificateNumber: `LEGIT-PENDING-${nowTs}`,
+        recipientEmail: "legit-pending@test.edu",
+        tenantId,
+        expiresAt: new Date(Date.now() + 86400000),
+        consumedAt: null,
+        claimedByUserId: null,
+      },
+    });
+    expect(legitimatePending.consumedAt).toBeNull();
+    expect(legitimatePending.claimedByUserId).toBeNull();
+
+    // 5g. Legitimate atomic first-claim UPDATE (from both null to both set) succeeds
+    const legitimateClaimed = await prisma.claimInvitation.update({
+      where: { id: legitimatePending.id },
+      data: {
+        consumedAt: new Date(),
+        claimedByUserId: userIdAlice,
+      },
+    });
+    expect(legitimateClaimed.consumedAt).not.toBeNull();
+    expect(legitimateClaimed.claimedByUserId).toBe(userIdAlice);
+
     // Verify unconsumed invitation remains strictly intact and unassigned after rejected mutations
     const losingInvAfterRejections = await prisma.claimInvitation.findUnique({
       where: { id: unconsumedInvitations[0].id },
@@ -1305,12 +1307,72 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     expect(losingInvAfterRejections?.consumedAt).toBeNull();
     expect(losingInvAfterRejections?.claimedByUserId).toBeNull();
 
-    // 6. Verify the winner's ownership record remains intact in PostgreSQL after all rejected mutations
-    const ownerAfterRejectedMutations = await prisma.claimInvitation.findUnique({
+    // 6. Deletion Protection Assertions (Phase 3.4)
+    // 6a. Attempting to delete a consumed claim invitation directly must be rejected by PostgreSQL trigger (SQLSTATE 23514)
+    let directDeleteError: any = null;
+    try {
+      await prisma.claimInvitation.delete({
+        where: { id: consumedOwners[0].id },
+      });
+    } catch (err: any) {
+      directDeleteError = err;
+    }
+    expect(directDeleteError).toBeDefined();
+    expect(String(directDeleteError.message || directDeleteError)).toMatch(/deletion violation|cannot be deleted|23514/i);
+
+    // 6b. Attempting to delete parent CredentialRecord cascades to claim_invitations and must be blocked by trigger (SQLSTATE 23514)
+    let parentCredDeleteError: any = null;
+    try {
+      await prisma.credentialRecord.delete({
+        where: { credentialId: credIdRaced },
+      });
+    } catch (err: any) {
+      parentCredDeleteError = err;
+    }
+    expect(parentCredDeleteError).toBeDefined();
+    expect(String(parentCredDeleteError.message || parentCredDeleteError)).toMatch(/deletion violation|cannot be deleted|23514/i);
+
+    // 6c. Attempting to delete parent Tenant cascades down to claim_invitations and must be blocked by trigger (SQLSTATE 23514)
+    let parentTenantDeleteError: any = null;
+    try {
+      await prisma.tenant.delete({
+        where: { id: tenantId },
+      });
+    } catch (err: any) {
+      parentTenantDeleteError = err;
+    }
+    expect(parentTenantDeleteError).toBeDefined();
+    expect(String(parentTenantDeleteError.message || parentTenantDeleteError)).toMatch(/deletion violation|cannot be deleted|23514/i);
+
+    // 6d. Attempting to delete the owner User must be blocked by foreign key restrict (SQLSTATE 23503)
+    let userDeleteBlocked = false;
+    try {
+      await prisma.user.delete({
+        where: { id: winnerUserId },
+      });
+    } catch (delErr: any) {
+      userDeleteBlocked = true;
+      expect(delErr.message).toMatch(/foreign key|constraint|restrict|23503|P2003/i);
+    }
+    expect(userDeleteBlocked).toBe(true);
+
+    // 6e. Verify credential revocation succeeds without deleting or altering the claim invitation
+    const revokedCred = await prisma.credentialRecord.update({
+      where: { credentialId: credIdRaced },
+      data: {
+        state: "REVOKED",
+        revokedAt: new Date(),
+      },
+    });
+    expect(revokedCred.state).toBe("REVOKED");
+
+    // 6f. Verify the winner's ownership record remains strictly intact in PostgreSQL after all attempted mutations, deletions, and revocation
+    const ownerAfterAllAttempts = await prisma.claimInvitation.findUnique({
       where: { id: consumedOwners[0].id },
     });
-    expect(ownerAfterRejectedMutations?.claimedByUserId).toBe(winnerUserId);
-    expect(ownerAfterRejectedMutations?.consumedAt).not.toBeNull();
+    expect(ownerAfterAllAttempts).toBeDefined();
+    expect(ownerAfterAllAttempts?.claimedByUserId).toBe(winnerUserId);
+    expect(ownerAfterAllAttempts?.consumedAt).not.toBeNull();
   });
 
   // H133-09: GET wallet API ignores arbitrary caller-supplied userId and holderId parameters

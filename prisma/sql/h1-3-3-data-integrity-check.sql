@@ -22,6 +22,7 @@ HAVING COUNT(*) > 1;
 SELECT
   "id" AS "invitationId",
   "credentialId",
+  "tenantId",
   "consumedAt",
   "claimedByUserId"
 FROM "claim_invitations"
