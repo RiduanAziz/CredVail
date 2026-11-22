@@ -3,19 +3,25 @@
 import dynamic from "next/dynamic";
 import { CredentialStaticFallback } from "./fallback/CredentialStaticFallback";
 
-const CredentialCoreScene = dynamic(
+const InteractiveCredentialExperience = dynamic(
   () =>
-    import("./three/CredentialCoreScene").then((m) => m.CredentialCoreScene),
+    import("./interactive/InteractiveCredentialExperience").then(
+      (m) => m.InteractiveCredentialExperience
+    ),
   {
     ssr: false,
     loading: () => <CredentialStaticFallback />,
   }
 );
 
-export function CredentialCore() {
+interface CredentialCoreProps {
+  className?: string;
+}
+
+export function CredentialCore({ className = "" }: CredentialCoreProps) {
   return (
-    <div className="relative w-full aspect-square max-w-[540px] flex items-center justify-center">
-      <CredentialCoreScene scrollProgress={0.1} />
+    <div className={`relative w-full flex items-center justify-center ${className}`}>
+      <InteractiveCredentialExperience />
     </div>
   );
 }

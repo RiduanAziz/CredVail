@@ -1,84 +1,97 @@
 "use client";
 
-import { CheckCircle2, ShieldCheck, KeyRound, LockKeyhole } from "lucide-react";
+import { ShieldCheck, Check, Search } from "lucide-react";
 
 export function CredentialStaticFallback() {
   return (
     <div
       role="img"
-      aria-label="3D-styled physical digital verifiable credential artifact with cryptographic seal"
-      className="relative mx-auto flex w-full max-w-[500px] flex-col items-center justify-center p-4"
+      aria-label="3D-styled physical digital verifiable credential artifact with circular plinth, shield, ribbon seal, and magnifying glass (Reference 01)"
+      className="relative mx-auto flex w-full max-w-[520px] flex-col items-center justify-center p-6 select-none"
     >
-      {/* Outer ambient glow */}
-      <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-tr from-brand-cobalt/20 via-brand-indigo/15 to-amber-500/10 blur-3xl" />
-
-      {/* Orbital decorative rings */}
-      <div className="pointer-events-none absolute inset-[-10%] rounded-full border border-indigo-500/20 [transform:rotateX(66deg)_rotateZ(-20deg)]" />
-      <div className="pointer-events-none absolute inset-[-4%] rounded-full border border-brand-cobalt/15 [transform:rotateX(66deg)_rotateZ(25deg)]" />
-
-      {/* Floating Trust Nodes */}
-      <div className="absolute -left-2 top-10 flex items-center gap-1.5 rounded-full border border-white/20 bg-brand-navy/90 px-3 py-1 text-[11px] font-medium text-blue-100 shadow-lg backdrop-blur">
-        <KeyRound className="h-3 w-3 text-brand-cobalt" />
-        <span>Issuer Key Epoch 01</span>
+      {/* Background Soft Studio Halo Glow */}
+      <div className="absolute inset-0 -z-10 flex items-center justify-center">
+        <div className="h-80 w-80 rounded-full bg-gradient-to-tr from-brand-cobalt/15 via-indigo-100/40 to-transparent blur-2xl" />
       </div>
 
-      <div className="absolute -right-2 bottom-12 flex items-center gap-1.5 rounded-full border border-white/20 bg-brand-navy/90 px-3 py-1 text-[11px] font-medium text-emerald-100 shadow-lg backdrop-blur">
-        <CheckCircle2 className="h-3 w-3 text-emerald-400" />
-        <span>VALID_CURRENT</span>
-      </div>
-
-      {/* Main Credential Artifact */}
-      <div className="relative w-full aspect-[1.58/1] rounded-2xl border border-white/40 bg-gradient-to-br from-[#ffffff] via-[#f8f9fc] to-[#e8ecf6] p-6 shadow-2xl ring-1 ring-black/5 [transform:perspective(1000px)_rotateX(6deg)_rotateY(-8deg)] transition-transform duration-500 hover:[transform:perspective(1000px)_rotateX(0deg)_rotateY(0deg)]">
-        {/* Subtle guilloche background pattern */}
-        <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-[0.04] [background-image:radial-gradient(circle_at_center,#000_1px,transparent_1px)] [background-size:12px_12px]" />
-
-        {/* Top Header */}
-        <div className="flex items-start justify-between border-b border-black/5 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-brand-navy font-black text-xs text-white shadow-sm">
-              C
-            </div>
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-brand-navy">CREDVAIL</p>
-              <p className="text-[8px] font-medium text-muted-foreground">W3C Verifiable Credential 2.0</p>
-            </div>
+      {/* Flanking Trust Elements (CSS-Rendered Metaphors for Reference 01) */}
+      <div className="relative flex w-full items-center justify-center">
+        {/* Left: Shield with Checkmark */}
+        <div className="absolute -left-3 bottom-12 z-20 hidden sm:flex h-20 w-16 flex-col items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-slate-100 to-slate-200 p-2 shadow-xl ring-1 ring-black/5 [transform:rotate(-8deg)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600/10 text-brand-cobalt">
+            <Check className="h-6 w-6 stroke-[3]" />
           </div>
-          <div className="flex items-center gap-1 rounded border border-emerald-500/20 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
-            <ShieldCheck className="h-3 w-3 text-emerald-600" />
-            <span>ECDSA NIST P-256</span>
+          <span className="mt-1 font-mono text-[8px] font-bold uppercase tracking-wider text-slate-600">Trust</span>
+        </div>
+
+        {/* Center: Main Reference 01 Certificate Plaque */}
+        <div className="relative z-10 w-full max-w-[340px] aspect-[1/1.36] rounded-2xl border-2 border-[#0F1D38]/20 bg-gradient-to-b from-[#FFFFFF] via-[#FAFBFD] to-[#F1F5F9] p-5 shadow-2xl ring-1 ring-black/5 [transform:perspective(1000px)_rotateX(4deg)]">
+          {/* Decorative Corner Insets & Inner Border */}
+          <div className="relative flex h-full w-full flex-col justify-between rounded-xl border border-[#0F1D38]/30 p-4">
+            {/* Header */}
+            <div className="text-center">
+              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F1D38] font-black text-xs text-white shadow-sm">
+                C
+              </div>
+              <p className="mt-2 font-mono text-[9px] font-extrabold uppercase tracking-[0.2em] text-[#0F1D38]">
+                CREDVAIL NETWORK
+              </p>
+              <p className="text-[7px] font-semibold uppercase tracking-wider text-blue-600">
+                W3C Verifiable Credential 2.0
+              </p>
+            </div>
+
+            {/* Title & Recipient */}
+            <div className="my-2 text-center space-y-1">
+              <p className="font-mono text-[8px] font-bold uppercase tracking-widest text-[#64748B]">
+                Accreditation Standard
+              </p>
+              <h4 className="text-xs font-black text-[#0F1D38] sm:text-sm">
+                CERTIFICATE OF ACCREDITATION
+              </h4>
+              <p className="text-[9px] italic text-[#475569]">Conferred unto Verified Institution</p>
+            </div>
+
+            {/* Claims Mini-table */}
+            <div className="rounded-lg bg-black/[0.02] p-2 text-[8px] font-mono text-slate-600 space-y-0.5 border border-black/5">
+              <p>URN: urn:credvail:vc:institution:2026</p>
+              <p>STATUS: CRYPTOGRAPHICALLY SECURED</p>
+            </div>
+
+            {/* Bottom Footer & Pinned Ribbon Seal */}
+            <div className="flex items-end justify-between pt-2 border-t border-black/5">
+              <div className="space-y-0.5 text-[8px] font-mono text-slate-500">
+                <p>DID: did:web:credvail.org</p>
+                <p>ROOT: 0x89e2...6701</p>
+              </div>
+
+              {/* Ribbon Seal Medallion (Lower Right) */}
+              <div className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-amber-400 bg-gradient-to-tr from-blue-900 via-blue-700 to-indigo-800 shadow-md">
+                <ShieldCheck className="h-5 w-5 text-amber-300 drop-shadow-sm" />
+                {/* Ribbon tails hanging down */}
+                <div className="absolute -bottom-2 -left-0.5 h-3 w-1.5 rounded-sm bg-blue-900 [transform:rotate(18deg)]" />
+                <div className="absolute -bottom-2 -right-0.5 h-3 w-1.5 rounded-sm bg-blue-900 [transform:rotate(-18deg)]" />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Credential Body */}
-        <div className="mt-4 space-y-1">
-          <p className="text-[9px] font-semibold uppercase tracking-widest text-indigo-600">Accredited Achievement</p>
-          <h3 className="text-base font-bold text-brand-navy sm:text-lg">
-            Master of Digital Trust & Applied Cryptography
-          </h3>
-          <p className="text-[11px] text-muted-foreground">Conferred to: <span className="font-semibold text-foreground">Verified Recipient</span></p>
-        </div>
-
-        {/* Bottom Details & Gold Seal */}
-        <div className="mt-6 flex items-end justify-between border-t border-black/5 pt-3">
-          <div className="space-y-0.5 text-[9px] font-mono text-muted-foreground">
-            <p>ROOT: 0x7a8f...92d1 (Sepolia L1)</p>
-            <p>ISSUER: did:web:credvail.org</p>
+        {/* Right: Magnifying Glass */}
+        <div className="absolute -right-3 bottom-12 z-20 hidden sm:flex h-20 w-16 flex-col items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-slate-100 to-slate-200 p-2 shadow-xl ring-1 ring-black/5 [transform:rotate(8deg)]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600/10 text-brand-cobalt">
+            <Search className="h-6 w-6 stroke-[2.5]" />
           </div>
-
-          {/* Embossed Golden Seal */}
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-full border-2 border-amber-400 bg-gradient-to-tr from-amber-600 via-amber-400 to-amber-200 shadow-md">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-300/80 bg-amber-500/20">
-              <ShieldCheck className="h-5 w-5 text-amber-900 drop-shadow-sm" />
-            </div>
-            <div className="absolute -bottom-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
-              <CheckCircle2 className="h-3 w-3" />
-            </div>
-          </div>
+          <span className="mt-1 font-mono text-[8px] font-bold uppercase tracking-wider text-slate-600">Verify</span>
         </div>
       </div>
 
-      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-        Deterministic Cryptographic Credential
+      {/* Studio Plinth Base Underneath */}
+      <div className="relative -mt-3 h-5 w-72 rounded-full border border-black/10 bg-gradient-to-r from-slate-200 via-white to-slate-200 shadow-md">
+        <div className="absolute inset-x-2 bottom-0.5 h-0.5 rounded-full bg-slate-400/40" />
+      </div>
+
+      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-[#64748B]">
+        Authenticated Institutional Digital Document
       </p>
     </div>
   );

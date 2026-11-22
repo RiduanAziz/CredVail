@@ -9,7 +9,7 @@ export function FinalDarkScene() {
   const { finale } = LANDING_CONTENT;
 
   return (
-    <section className="relative overflow-hidden bg-[#0A1224]/85 backdrop-blur-md py-24 sm:py-36 lg:py-44 text-white">
+    <section id="finale" className="relative overflow-hidden bg-[#0A1224]/85 backdrop-blur-md py-24 sm:py-36 lg:py-44 text-white">
       {/* Background ambient lighting wisps */}
       <div className="pointer-events-none absolute left-1/4 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-cobalt/15 blur-[120px]" />
       <div className="pointer-events-none absolute right-1/4 top-1/2 h-[450px] w-[450px] -translate-y-1/2 translate-x-1/2 rounded-full bg-brand-violet/15 blur-[120px]" />

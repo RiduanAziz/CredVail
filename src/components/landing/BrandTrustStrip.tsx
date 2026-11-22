@@ -14,7 +14,7 @@ export function BrandTrustStrip() {
   const { trustStrip } = LANDING_CONTENT;
 
   return (
-    <section className="relative border-y border-black/8 bg-white/45 backdrop-blur-md py-14 sm:py-16">
+    <section id="brand-trust" className="relative border-y border-black/8 bg-white/45 backdrop-blur-md py-14 sm:py-16">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6">
         {/* Subtle Section Eyebrow Header */}
         <p className="text-center font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[#6B7280]">

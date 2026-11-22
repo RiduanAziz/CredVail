@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LANDING_CONTENT } from "@/config/landing-content";
+import { CredentialCore } from "@/components/visual/CredentialCore";
 
 export function HeroSection() {
   const router = useRouter();
@@ -22,7 +23,7 @@ export function HeroSection() {
   };
 
   return (
-    <section className="relative overflow-hidden bg-transparent pb-16 pt-12 sm:pb-24 sm:pt-20 lg:pb-32 lg:pt-28">
+    <section id="hero" className="relative overflow-hidden bg-transparent pb-16 pt-12 sm:pb-24 sm:pt-20 lg:pb-32 lg:pt-28">
       {/* Editorial Canvas Subtle Grid */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(#0C0D12_1px,transparent_1px),linear-gradient(90deg,#0C0D12_1px,transparent_1px)] [background-size:48px_48px]" />
 
@@ -114,11 +115,9 @@ export function HeroSection() {
             </div>
           </div>
 
-          {/* Right Column: Visual Window to 3D Background */}
-          <div className="relative flex items-center justify-center min-h-[380px] lg:min-h-[520px]">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="h-72 w-72 rounded-full bg-gradient-to-tr from-brand-cobalt/15 via-brand-indigo/10 to-transparent blur-3xl" />
-            </div>
+          {/* Right Column: Interactive 3D Credential (Reference 01 + Reference 03) */}
+          <div className="relative flex items-center justify-center w-full min-h-[440px] lg:min-h-[580px]">
+            <CredentialCore />
           </div>
         </div>
       </div>

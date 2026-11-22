@@ -6,7 +6,7 @@ export function TrustNetworkSection() {
   const { trustNetwork } = LANDING_CONTENT;
 
   return (
-    <section className="relative border-b border-black/8 bg-transparent py-20 sm:py-28 lg:py-36">
+    <section id="trust-network" className="relative border-b border-black/8 bg-transparent py-20 sm:py-28 lg:py-36">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6">
         {/* Section Header */}
         <div className="max-w-2xl rounded-3xl p-6 bg-white/50 backdrop-blur-md border border-black/5">
