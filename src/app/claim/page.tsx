@@ -132,8 +132,9 @@ function ClaimCredentialContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-foreground py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto space-y-8">
+    <div className="page-shell relative overflow-hidden px-4 py-16 text-foreground sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
+      <div className="relative mx-auto max-w-2xl space-y-10">
         {/* Navigation */}
         <div className="flex items-center justify-between pb-4 border-b border-border/60">
           <Link href="/wallet" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -151,7 +152,7 @@ function ClaimCredentialContent() {
           <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
             <Wallet className="w-7 h-7" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-serif font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-5xl">
             Claim Your Digital Credential
           </h1>
           <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto">
@@ -161,7 +162,7 @@ function ClaimCredentialContent() {
 
         {/* Claim Card */}
         {!claimedCred ? (
-          <Card className="shadow-xl border border-border">
+          <Card className="glass-surface overflow-hidden rounded-2xl shadow-xl">
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-bold">Ownership Verification</CardTitle>
               <CardDescription className="text-xs">

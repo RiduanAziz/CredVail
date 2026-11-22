@@ -62,8 +62,9 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-[90vh] flex items-center justify-center py-12 px-4 sm:px-6">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="page-shell relative flex items-center justify-center overflow-hidden px-4 py-16 sm:px-6">
+      <div className="surface-grid pointer-events-none absolute inset-0 opacity-60" />
+      <div className="relative w-full max-w-lg space-y-7">
         <div className="flex flex-col items-center text-center space-y-2">
           <Link href="/" className="flex items-center gap-2.5 font-bold text-2xl tracking-tight mb-2 group">
             <Image
@@ -82,7 +83,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        <Card className="border shadow-md">
+        <Card className="glass-surface overflow-hidden rounded-2xl shadow-xl">
           <form onSubmit={handleSubmit}>
             <CardHeader className="space-y-1 pb-4">
               <CardTitle className="text-lg">Account & Organization Setup</CardTitle>

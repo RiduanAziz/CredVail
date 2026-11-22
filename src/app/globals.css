@@ -85,5 +85,235 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    background-image: linear-gradient(180deg, hsl(var(--background)), hsl(220 40% 96% / 0.7));
+  }
+}
+
+@layer utilities {
+  .page-shell {
+    min-height: calc(100vh - 4rem);
+    background:
+      radial-gradient(circle at 50% -10%, hsl(239 84% 62% / 0.08), transparent 34rem),
+      hsl(var(--background));
+  }
+
+  .surface-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.42) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.42) 1px, transparent 1px);
+    background-size: 4rem 4rem;
+    mask-image: linear-gradient(to bottom, black, transparent 75%);
+  }
+
+  .section-eyebrow {
+    color: hsl(var(--primary));
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .glass-surface {
+    border: 1px solid hsl(var(--border) / 0.8);
+    background: hsl(var(--card) / 0.78);
+    box-shadow: 0 1.5rem 4rem hsl(225 45% 17% / 0.06);
+    backdrop-filter: blur(1rem);
+  }
+}
+
+@layer components {
+  .credential-core {
+    --pointer-x: 0;
+    --pointer-y: 0;
+    position: relative;
+    isolation: isolate;
+    width: min(100%, 34rem);
+    aspect-ratio: 1;
+    display: grid;
+    place-items: center;
+    perspective: 1200px;
+  }
+
+  .credential-core::before,
+  .credential-core::after {
+    content: "";
+    position: absolute;
+    border: 1px solid hsl(var(--primary) / 0.16);
+    border-radius: 999px;
+    transform: rotateX(68deg) rotateZ(-18deg);
+  }
+
+  .credential-core::before {
+    inset: 12%;
+  }
+
+  .credential-core::after {
+    inset: 23%;
+    border-color: hsl(263 76% 62% / 0.2);
+  }
+
+  .credential-core__halo {
+    position: absolute;
+    inset: 19%;
+    border-radius: 50%;
+    background: radial-gradient(circle, hsl(239 84% 62% / 0.22), transparent 68%);
+    filter: blur(18px);
+  }
+
+  .credential-core__card {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    width: 65%;
+    aspect-ratio: 1.55;
+    padding: 1.35rem;
+    border: 1px solid hsl(0 0% 100% / 0.24);
+    border-radius: 1.2rem;
+    background: linear-gradient(135deg, #182f63, #3e3a9d 58%, #6d43ba);
+    box-shadow: 0 2rem 5rem hsl(229 62% 16% / 0.38), inset 0 1px hsl(0 0% 100% / 0.28);
+    transform: translate3d(calc(var(--pointer-x) * 0.35rem), calc(var(--pointer-y) * 0.35rem), 0) rotateX(calc(var(--pointer-y) * -4deg)) rotateY(calc(var(--pointer-x) * 6deg)) rotateZ(-5deg);
+    animation: credential-float 7s ease-in-out infinite;
+    transition: transform 180ms ease-out;
+  }
+
+  .credential-core__card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(115deg, transparent 30%, hsl(0 0% 100% / 0.18), transparent 62%);
+    transform: translateX(-120%);
+    animation: credential-shimmer 6s ease-in-out infinite;
+  }
+
+  .credential-core__card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .credential-core__mark {
+    display: grid;
+    width: 1.5rem;
+    height: 1.5rem;
+    place-items: center;
+    border: 1px solid hsl(0 0% 100% / 0.36);
+    border-radius: 0.4rem;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 800;
+  }
+
+  .credential-core__lines {
+    width: 42%;
+    height: 2.4rem;
+    margin-top: 1.5rem;
+    opacity: 0.55;
+    background: repeating-linear-gradient(90deg, hsl(0 0% 100% / 0.7) 0 2px, transparent 2px 5px);
+    mask-image: linear-gradient(to bottom, black, transparent);
+  }
+
+  .credential-core__seal {
+    position: absolute;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    display: grid;
+    width: 2.4rem;
+    height: 2.4rem;
+    place-items: center;
+    border: 1px solid hsl(151 76% 70% / 0.5);
+    border-radius: 50%;
+    color: #a7f3d0;
+    background: hsl(151 76% 24% / 0.35);
+  }
+
+  .credential-core__orbit {
+    position: absolute;
+    z-index: 1;
+    display: grid;
+    width: 86%;
+    height: 86%;
+    place-items: start center;
+    border: 1px solid hsl(var(--primary) / 0.2);
+    border-radius: 50%;
+    transform: rotateX(68deg) rotateZ(-18deg);
+    animation: credential-orbit 16s linear infinite;
+  }
+
+  .credential-core__orbit--two {
+    width: 70%;
+    height: 70%;
+    border-color: hsl(263 76% 62% / 0.2);
+    animation-duration: 12s;
+    animation-direction: reverse;
+  }
+
+  .credential-core__orbit span {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    border: 1px solid hsl(0 0% 100% / 0.18);
+    border-radius: 50%;
+    color: #c7d2fe;
+    background: hsl(225 45% 17% / 0.88);
+    box-shadow: 0 0 1.5rem hsl(var(--primary) / 0.28);
+    transform: rotateZ(18deg) rotateX(-68deg);
+  }
+
+  .credential-core__orbit--two span {
+    transform: rotateZ(18deg) rotateX(-68deg);
+  }
+
+  .credential-core__node {
+    position: absolute;
+    z-index: 3;
+    width: 0.55rem;
+    height: 0.55rem;
+    border: 2px solid #dbeafe;
+    border-radius: 50%;
+    background: #5a5cf2;
+    box-shadow: 0 0 1rem #5a5cf2;
+  }
+
+  .credential-core__node--top { top: 13%; left: 52%; }
+  .credential-core__node--right { top: 56%; right: 8%; }
+  .credential-core__node--bottom { bottom: 12%; left: 29%; }
+
+  .credential-core__caption {
+    position: absolute;
+    right: 0;
+    bottom: 4%;
+    color: hsl(var(--muted-foreground));
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  @keyframes credential-float {
+    0%, 100% { margin-top: 0; }
+    50% { margin-top: -0.75rem; }
+  }
+
+  @keyframes credential-shimmer {
+    0%, 45% { transform: translateX(-120%); }
+    75%, 100% { transform: translateX(120%); }
+  }
+
+  @keyframes credential-orbit {
+    to { transform: rotateX(68deg) rotateZ(342deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .credential-core__card,
+    .credential-core__card::before,
+    .credential-core__orbit {
+      animation: none;
+    }
+    .credential-core__card {
+      transform: none;
+    }
   }
 }

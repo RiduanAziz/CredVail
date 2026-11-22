@@ -1,8 +1,18 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Github, FileText, CheckCircle2 } from "lucide-react";
 
 export function Footer() {
+  const pathname = usePathname();
+  const publicRoute = ["/", "/login", "/register", "/verify", "/wallet", "/claim"].some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+
+  if (!publicRoute) return null;
+
   return (
     <footer className="border-t bg-muted/40">
       <div className="container mx-auto max-w-7xl px-4 py-12 sm:px-6">

@@ -228,13 +228,14 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-foreground py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="page-shell relative overflow-hidden px-4 py-14 text-foreground sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
+      <div className="relative mx-auto max-w-6xl space-y-10">
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border/60">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-serif font-bold tracking-tight text-foreground">
+              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl">
                 Holder Browser Wallet
               </h1>
               <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">

@@ -1,310 +1,170 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
-  Shield,
-  CheckCircle2,
-  Lock,
-  Layers,
-  Database,
-  QrCode,
-  FileSpreadsheet,
-  Cpu,
-  KeyRound,
-  FileCheck,
-  RefreshCw,
-  EyeOff,
   ArrowRight,
-  ExternalLink,
-  Sparkles,
+  Award,
+  CheckCircle2,
+  FileCheck2,
+  Fingerprint,
+  KeyRound,
+  Layers3,
+  LockKeyhole,
+  Network,
+  ShieldCheck,
+  Upload,
+  WalletCards,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CredentialCore } from "@/components/visual/CredentialCore";
+
+const capabilities = [
+  {
+    icon: FileCheck2,
+    title: "Issue with confidence",
+    description: "Create credentials from reusable templates and issue them through controlled institutional workflows.",
+    href: "/register",
+  },
+  {
+    icon: Upload,
+    title: "Scale certificate operations",
+    description: "Import recipient data in batches and generate signed, verifiable certificates without leaving the platform.",
+    href: "/register",
+  },
+  {
+    icon: WalletCards,
+    title: "Put ownership first",
+    description: "Give recipients a private browser wallet for claiming, storing, and presenting their credentials.",
+    href: "/wallet",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Verify independently",
+    description: "Check credential authenticity, issuer identity, status, and integrity with the public verification engine.",
+    href: "/verify",
+  },
+];
+
+const lifecycle = [
+  ["01", "ISSUE", "An institution prepares a credential for its recipient."],
+  ["02", "SIGN", "The issuer signs the credential with its governed key."],
+  ["03", "ANCHOR", "Batch integrity can be recorded through Merkle-root anchoring."],
+  ["04", "CLAIM", "The recipient claims ownership into a private wallet."],
+  ["05", "VERIFY", "A relying party checks the credential independently."],
+];
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden border-b bg-gradient-to-b from-primary/5 via-background to-background py-20 md:py-32">
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 relative z-10">
-          <div className="flex flex-col items-center text-center max-w-3xl mx-auto space-y-6">
-            <div className="flex items-center justify-center">
-              <div className="relative p-3 rounded-2xl bg-card border shadow-lg hover:shadow-xl transition-shadow">
-                <Image
-                  src="/brand/brand-symbol-128.png"
-                  alt="CREDVAIL Identity Mark"
-                  width={56}
-                  height={56}
-                  className="h-14 w-14 object-contain"
-                  priority
-                />
-              </div>
-            </div>
-
-            <Badge variant="epoch" className="px-3.5 py-1 text-xs uppercase tracking-wider gap-1.5 shadow-sm">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
-              <span>W3C VC 2.0 & Ethereum Sepolia Testnet</span>
+    <div className="overflow-hidden">
+      <section className="relative border-b bg-[radial-gradient(circle_at_78%_18%,hsl(239_84%_62%/.18),transparent_30%),linear-gradient(180deg,hsl(220_58%_13%)_0%,hsl(225_45%_17%)_68%,hsl(210_40%_98%)_100%)] text-white">
+        <div className="absolute inset-0 opacity-30 [background-image:linear-gradient(hsl(0_0%_100%/.06)_1px,transparent_1px),linear-gradient(90deg,hsl(0_0%_100%/.06)_1px,transparent_1px)] [background-size:64px_64px]" />
+        <div className="container relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-20 pt-14 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:gap-4 lg:pb-32 lg:pt-20">
+          <div className="relative z-10 max-w-2xl">
+            <Badge variant="brandSubtle" className="border-white/15 bg-white/10 text-indigo-100">
+              <span className="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-emerald-300" />
+              Digital trust infrastructure
             </Badge>
-
-            <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-foreground leading-[1.15]">
-              Blockchain-Verified,{" "}
-              <span className="bg-brand-gradient bg-clip-text text-transparent">
-                Privacy-Preserving
-              </span>{" "}
-              Digital Credentials
+            <h1 className="mt-7 max-w-3xl text-4xl font-semibold leading-[1.04] tracking-[-0.05em] sm:text-6xl lg:text-[4.5rem]">
+              Digital credentials,{" "}
+              <span className="bg-gradient-to-r from-blue-300 via-indigo-200 to-violet-300 bg-clip-text text-transparent">built on verifiable trust.</span>
             </h1>
-
-            <p className="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-2xl">
-              An institutional multi-tenant SaaS infrastructure combining automated certificate generation,
-              selective disclosure, and Ethereum Merkle-root integrity anchoring with freshness-aware verification.
+            <p className="mt-6 max-w-lg text-base leading-7 text-blue-100/70 sm:text-lg">
+              Create, issue, manage, claim, and verify digital credentials through secure institutional workflows and cryptographic integrity checks.
             </p>
-
-            <div className="flex flex-col sm:flex-row items-center gap-4 pt-4 w-full sm:w-auto">
-              <Link href="#verify" className="w-full sm:w-auto">
-                <Button size="lg" variant="brand" className="w-full sm:w-auto gap-2 shadow-md">
-                  <CheckCircle2 className="h-5 w-5 text-white/90" />
-                  <span>Launch Public Verifier</span>
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+              <Link href="/verify">
+                <Button size="lg" variant="brand" className="w-full gap-2 bg-white text-brand-navy hover:bg-blue-50 sm:w-auto">
+                  Verify a credential <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/register" className="w-full sm:w-auto">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto gap-2">
-                  <span>Institutional Dashboard</span>
-                  <ArrowRight className="h-4 w-4" />
+              <Link href="/register">
+                <Button size="lg" variant="brandOutline" className="w-full border-white/25 bg-white/5 text-white hover:bg-white/10 sm:w-auto">
+                  Open institution portal
                 </Button>
               </Link>
             </div>
-
-            <div className="pt-8 flex flex-wrap items-center justify-center gap-6 text-xs text-muted-foreground border-t border-border/60 w-full">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                Zero On-Chain PII
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Layers className="h-4 w-4 text-blue-500" />
-                O(1) Gas Batch Merkle Tree
-              </span>
-              <span className="flex items-center gap-1.5">
-                <EyeOff className="h-4 w-4 text-purple-500" />
-                ECDSA-SD-2023 Selective Disclosure
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Lock className="h-4 w-4 text-amber-500" />
-                W3C Bitstring Status Lists
-              </span>
+            <div className="mt-12 flex flex-wrap gap-x-6 gap-y-3 border-t border-white/10 pt-5 text-xs text-blue-100/60">
+              <span className="flex items-center gap-2"><LockKeyhole className="h-4 w-4 text-emerald-300" /> Privacy-aware workflows</span>
+              <span className="flex items-center gap-2"><Fingerprint className="h-4 w-4 text-indigo-300" /> Cryptographic proofs</span>
+              <span className="flex items-center gap-2"><Network className="h-4 w-4 text-violet-300" /> Independent verification</span>
             </div>
           </div>
+          <CredentialCore />
         </div>
       </section>
 
-      {/* 5-State Verification Showcase */}
-      <section className="py-16 bg-muted/30 border-b">
+      <section id="platform" className="border-b bg-background py-20 sm:py-28">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-10 space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Freshness-Aware Verification Machine
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              CREDVAIL replaces binary validation with a formal 5-state verification engine distinguishing
-              cryptographic authenticity, revocation status, key rotation, and snapshot freshness.
-            </p>
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">One platform, every handoff</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">From institutional issuance to independent verification.</h2>
+            <p className="mt-4 text-muted-foreground">CREDVAIL connects the operational and cryptographic sides of a credential lifecycle without replacing the systems your organization already relies on.</p>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Card className="border-emerald-200 dark:border-emerald-800/40 bg-card">
-              <CardHeader className="p-4 pb-2">
-                <Badge variant="verified" className="w-fit">VALID_CURRENT</Badge>
-                <CardTitle className="text-base mt-2">Active & Valid</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-                Authentic signature, verified Merkle leaf, active key epoch, fresh bitstring bit = 0.
-              </CardContent>
-            </Card>
-
-            <Card className="border-red-200 dark:border-red-800/40 bg-card">
-              <CardHeader className="p-4 pb-2">
-                <Badge variant="revoked" className="w-fit">REVOKED</Badge>
-                <CardTitle className="text-base mt-2">Revoked Credential</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-                Authentic historical issuance, but revoked in current status list bitstring (bit = 1).
-              </CardContent>
-            </Card>
-
-            <Card className="border-indigo-200 dark:border-indigo-800/40 bg-card">
-              <CardHeader className="p-4 pb-2">
-                <Badge variant="epoch" className="w-fit">AUTHENTICITY_ONLY</Badge>
-                <CardTitle className="text-base mt-2">Rotated Key Epoch</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-                Authentic credential signed during a historical key epoch that has gracefully expired.
-              </CardContent>
-            </Card>
-
-            <Card className="border-amber-200 dark:border-amber-800/40 bg-card">
-              <CardHeader className="p-4 pb-2">
-                <Badge variant="warning" className="w-fit">STATUS_UNKNOWN</Badge>
-                <CardTitle className="text-base mt-2">Stale Snapshot</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-                Signature valid, but status snapshot is unreachable or exceeded cache freshness TTL.
-              </CardContent>
-            </Card>
-
-            <Card className="border-slate-300 dark:border-slate-800 bg-card">
-              <CardHeader className="p-4 pb-2">
-                <Badge variant="destructive" className="w-fit">INVALID</Badge>
-                <CardTitle className="text-base mt-2">Forged / Tampered</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-1 text-xs text-muted-foreground">
-                Signature forgery, claim tampering, Merkle proof mismatch, or compromised issuer key.
-              </CardContent>
-            </Card>
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {capabilities.map((capability) => {
+              const Icon = capability.icon;
+              return (
+                <Link key={capability.title} href={capability.href} className="group rounded-2xl border bg-card p-5 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-brand-glow">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white"><Icon className="h-5 w-5" /></div>
+                  <h3 className="mt-5 font-semibold">{capability.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{capability.description}</p>
+                  <span className="mt-5 inline-flex items-center gap-1 text-xs font-semibold text-primary">Explore <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" /></span>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* Core Architectural Pillars */}
-      <section id="architecture" className="py-20">
+      <section id="how-it-works" className="border-b bg-muted/30 py-20 sm:py-28">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <h2 className="text-3xl font-bold tracking-tight">
-              Two Connected Capabilities, One Unified Platform
-            </h2>
-            <p className="text-muted-foreground text-sm">
-              Bridging institutional operations with machine-verifiable cryptographic assurance.
-            </p>
+          <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
+            <div className="max-w-xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">The trust lifecycle</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">A credential is more than a document.</h2>
+            </div>
+            <p className="max-w-md text-sm leading-6 text-muted-foreground">Each handoff is designed to preserve issuer authority, recipient ownership, and verifier confidence.</p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <Card className="border shadow-sm hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-400 mb-3">
-                  <FileSpreadsheet className="h-5 w-5" />
-                </div>
-                <CardTitle className="text-xl">A. Digital Certificate Management</CardTitle>
-                <CardDescription>
-                  Comprehensive institutional operations for universities, academies, and professional bodies.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <span>Visual certificate template designer with dynamic placeholders.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <span>CSV and XLSX bulk ingestion with formula injection defense.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <span>Collision-safe, tenant-aware certificate numbering (e.g. CREDVAIL-2026-000001).</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <span>Print-ready vector PDF generation with unique embedded QR verification codes.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                  <span>Batch ZIP archive streaming and institutional certificate dashboard.</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border shadow-sm hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400 mb-3">
-                  <Cpu className="h-5 w-5" />
-                </div>
-                <CardTitle className="text-xl">B. Cryptographic Trust Infrastructure</CardTitle>
-                <CardDescription>
-                  W3C-standardized verification anchored to the Ethereum blockchain.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>W3C Verifiable Credentials Data Model 2.0 with JSON-LD proofs.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>W3C DID:web institutional identity resolution and key epoch governance.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>ECDSA-SD-2023 zero-knowledge selective disclosure presentation suite.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Ethereum Sepolia batch Merkle root anchoring (O(1) gas cost scaling).</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>W3C Bitstring Status Lists with on-chain cryptographic digest commits.</span>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="mt-12 grid gap-3 md:grid-cols-5">
+            {lifecycle.map(([number, title, description], index) => (
+              <div key={title} className="relative rounded-2xl border bg-card p-5">
+                {index < lifecycle.length - 1 && <div className="absolute right-[-0.8rem] top-10 z-10 hidden h-px w-5 bg-primary/30 md:block" />}
+                <span className="font-mono text-xs text-primary">{number}</span>
+                <h3 className="mt-8 text-sm font-bold tracking-[0.12em]">{title}</h3>
+                <p className="mt-3 text-xs leading-5 text-muted-foreground">{description}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Interactive Verification Teaser Section */}
-      <section id="verify" className="py-20 bg-muted/40 border-t">
-        <div className="container mx-auto max-w-4xl px-4 sm:px-6">
-          <div className="text-center space-y-3 mb-10">
-            <h2 className="text-3xl font-bold tracking-tight">Public Credential Verification</h2>
-            <p className="text-sm text-muted-foreground">
-              Scan a certificate QR code or enter a Credential ID to independently verify authenticity,
-              blockchain inclusion, and real-time status.
-            </p>
+      <section id="trust" className="border-b bg-background py-20 sm:py-28">
+        <div className="container mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Designed for relying parties</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Make trust inspectable, not implied.</h2>
+            <p className="mt-5 text-muted-foreground">The public verifier evaluates the credential that was submitted. It does not rely on a screenshot, a logo, or a claim made by the issuer.</p>
+            <Link href="/verify" className="mt-7 inline-flex"><Button variant="outline" className="gap-2">Open public verifier <ArrowRight className="h-4 w-4" /></Button></Link>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              [ShieldCheck, "Authenticity", "Validate the credential signature and issuer relationship."],
+              [Layers3, "Integrity", "Inspect inclusion proofs and any available anchoring evidence."],
+              [KeyRound, "Governance", "Keep signing keys, epochs, and access under institutional control."],
+              [CheckCircle2, "Freshness", "Distinguish current status from an unreachable or stale snapshot."],
+            ].map(([Icon, title, description]) => {
+              const TrustIcon = Icon as typeof ShieldCheck;
+              return <div key={title as string} className="rounded-2xl border bg-card p-5"><TrustIcon className="h-5 w-5 text-primary" /><h3 className="mt-4 font-semibold">{title as string}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{description as string}</p></div>;
+            })}
+          </div>
+        </div>
+      </section>
 
-          <Card className="border shadow-md">
-            <CardContent className="p-6 sm:p-8 space-y-6">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  placeholder="Enter Credential ID or Certificate Number (e.g. CREDVAIL-2026-000001)"
-                  className="flex h-11 w-full rounded-md border border-input bg-background px-4 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                  defaultValue="CREDVAIL-2026-000001"
-                  readOnly
-                />
-                <Button size="lg" variant="brand" className="shrink-0 gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-white/90" />
-                  <span>Verify Credential</span>
-                </Button>
-              </div>
-
-              <div className="rounded-lg border bg-background p-4 space-y-3">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Sample Prototype Evaluation
-                  </span>
-                  <Badge variant="verified" className="gap-1">
-                    <CheckCircle2 className="h-3 w-3" />
-                    VALID_CURRENT
-                  </Badge>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-muted-foreground">Issuer DID: </span>
-                    <span className="font-mono font-medium">did:web:credvail.io:tenants:mit</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Sepolia Merkle Root: </span>
-                    <span className="font-mono font-medium">0x4a7e...91bc (Anchored)</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Key Epoch: </span>
-                    <span className="font-medium">Epoch 1 (Active, Uncompromised)</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Status Freshness: </span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">Digest Match (Epoch 4)</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      <section className="bg-brand-navy py-20 text-white sm:py-24">
+        <div className="container mx-auto flex max-w-5xl flex-col items-center px-4 text-center sm:px-6">
+          <Award className="h-8 w-8 text-indigo-300" />
+          <h2 className="mt-5 text-3xl font-semibold tracking-tight sm:text-4xl">Build a credential program people can verify.</h2>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-blue-100/70">Start with the public verifier or create an institution workspace for your issuance workflows.</p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row"><Link href="/register"><Button size="lg" variant="brand" className="w-full sm:w-auto">Get started <ArrowRight className="ml-2 h-4 w-4" /></Button></Link><Link href="/verify"><Button size="lg" variant="brandOutline" className="w-full border-white/20 text-white sm:w-auto">Verify a credential</Button></Link></div>
         </div>
       </section>
     </div>

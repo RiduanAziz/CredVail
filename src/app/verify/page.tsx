@@ -109,15 +109,16 @@ export default function UniversalVerifyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 text-foreground py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-10">
+    <div className="page-shell relative overflow-hidden px-4 py-16 text-foreground sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
+      <div className="relative mx-auto max-w-5xl space-y-12">
         {/* Hero Section */}
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold">
+          <div className="section-eyebrow inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5">
             <Sparkles className="w-3.5 h-3.5" />
             Decentralized Credential Verification Protocol
           </div>
-          <h1 className="text-4xl sm:text-5xl font-serif font-bold tracking-tight text-foreground">
+          <h1 className="text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-6xl">
             Verify Any Credential Instantly
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -126,7 +127,7 @@ export default function UniversalVerifyPage() {
         </div>
 
         {/* Input Switcher Tabs */}
-        <Card className="shadow-xl border border-border">
+        <Card className="glass-surface overflow-hidden rounded-2xl shadow-xl">
           <CardHeader className="pb-3 border-b border-border/60">
             <div className="flex items-center justify-between">
               <div className="flex gap-2">

@@ -132,9 +132,9 @@ export default function DashboardLayout({
   ];
 
   return (
-    <div className="min-h-screen bg-muted/20 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#f5f7fb] flex flex-col md:flex-row dark:bg-background">
       {/* Mobile Top Header */}
-      <div className="md:hidden flex items-center justify-between border-b bg-background px-4 py-3">
+      <div className="md:hidden flex items-center justify-between border-b bg-brand-navy px-4 py-3 text-white">
         <Link href={`/${slug}`} className="flex items-center gap-2 font-bold">
           <Image
             src="/brand/brand-symbol-64.png"
@@ -156,13 +156,13 @@ export default function DashboardLayout({
 
       {/* Sidebar Navigation */}
       <aside
-        className={`w-full md:w-64 border-r bg-background shrink-0 flex flex-col justify-between ${
+        className={`w-full md:w-72 border-r bg-[#101d38] shrink-0 flex flex-col justify-between text-white ${
           mobileMenuOpen ? "block" : "hidden md:flex"
         }`}
       >
         <div className="flex flex-col">
           {/* Institution Header */}
-          <div className="p-4 border-b">
+          <div className="p-5 border-b border-white/10">
             <Link href="/" className="flex items-center gap-2.5 font-bold mb-4 group">
               <Image
                 src="/brand/brand-symbol-64.png"
@@ -175,21 +175,21 @@ export default function DashboardLayout({
                 <span className="font-extrabold tracking-tight text-base">
                   CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span>
                 </span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-mono">
+                <span className="text-[10px] text-blue-100/45 uppercase tracking-widest font-mono">
                   Trust Network
                 </span>
               </div>
             </Link>
 
-            <div className="bg-muted/40 rounded-lg p-2.5 border">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
               <div className="flex items-center gap-2 mb-1">
                 <Building className="h-4 w-4 text-primary shrink-0" />
-                <span className="text-xs font-semibold truncate text-foreground">
+                <span className="text-xs font-semibold truncate text-white">
                   {tenantName}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-muted-foreground font-mono">
+                <span className="text-[10px] text-blue-100/45 font-mono">
                   /{slug}
                 </span>
                 <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
@@ -200,7 +200,7 @@ export default function DashboardLayout({
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-3 space-y-1">
+          <nav className="space-y-1 p-4">
             {navItems.map((item) => {
               const isActive = item.exact
                 ? pathname === item.href
@@ -215,7 +215,7 @@ export default function DashboardLayout({
                   className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
                     isActive
                       ? "bg-brand-gradient text-white shadow-sm font-semibold"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-blue-100/60 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -234,20 +234,20 @@ export default function DashboardLayout({
         </div>
 
         {/* User Footer Profile & Logout */}
-        <div className="p-3 border-t bg-muted/10 space-y-2">
+        <div className="space-y-2 border-t border-white/10 bg-black/10 p-4">
           {didUri && (
-            <div className="p-2 bg-muted/40 rounded border text-[10px] font-mono text-muted-foreground truncate" title={didUri}>
-              <span className="text-primary font-semibold">DID: </span>
+            <div className="truncate rounded border border-white/10 bg-white/5 p-2 font-mono text-[10px] text-blue-100/50" title={didUri}>
+              <span className="font-semibold text-indigo-300">DID: </span>
               {didUri}
             </div>
           )}
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex flex-col min-w-0 pr-2">
-              <span className="text-xs font-medium truncate text-foreground">
+              <span className="text-xs font-medium truncate text-white">
                 {userEmail || "Signed In User"}
               </span>
-              <span className="text-[10px] text-muted-foreground">Active Session</span>
+              <span className="text-[10px] text-blue-100/45">Active Session</span>
             </div>
             <Button
               variant="outline"
@@ -264,7 +264,7 @@ export default function DashboardLayout({
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <header className="h-14 border-b bg-background flex items-center justify-between px-6 shrink-0">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white/80 px-5 backdrop-blur-md md:px-8 dark:bg-card/80">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>Institutions</span>
             <ChevronRight className="h-3 w-3" />
@@ -283,7 +283,7 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <div className="p-6 md:p-8 flex-1">
+        <div className="flex-1 p-5 md:p-8">
           {children}
         </div>
       </main>
