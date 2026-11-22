@@ -43,7 +43,10 @@ import { VcService } from "@/lib/crypto/vc-service";
 import { canonicalizeJson } from "@/lib/crypto/canonical";
 import { createSessionToken } from "@/lib/auth/session";
 import { ClaimInvitationService } from "@/lib/services/claim-invitation-service";
-import { ClaimInvitationRepository } from "@/lib/repositories/claim-invitation-repository";
+import {
+  ClaimInvitationRepository,
+  ClaimAlreadyConsumedError,
+} from "@/lib/repositories/claim-invitation-repository";
 import { GET as getCredentialsRoute } from "@/app/api/v1/wallet/credentials/route";
 import { POST as presentRoute } from "@/app/api/v1/wallet/present/route";
 
@@ -947,6 +950,23 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
     // Verify ownership authority: Only the winning claimant owns the credential
     const winnerUserId = consumedOwners[0].claimedByUserId!;
     const loserUserId = winnerUserId === userIdAlice ? userIdBob : userIdAlice;
+    const loserToken = winnerUserId === userIdAlice ? tokenB : tokenA;
+    const loserEmail = winnerUserId === userIdAlice ? bobEmail : aliceEmail;
+
+    // Verify mutual consistency between Promise.allSettled winner, persisted claimant, and selected loser
+    if (outcomeA.status === "fulfilled") {
+      expect(winnerUserId).toBe(userIdAlice);
+      expect(loserUserId).toBe(userIdBob);
+      expect(loserToken).toBe(tokenB);
+      expect(loserEmail).toBe(bobEmail);
+    } else {
+      expect(winnerUserId).toBe(userIdBob);
+      expect(loserUserId).toBe(userIdAlice);
+      expect(loserToken).toBe(tokenA);
+      expect(loserEmail).toBe(aliceEmail);
+    }
+    expect(consumedOwners[0].recipientEmail).toBe(winnerUserId === userIdAlice ? aliceEmail : bobEmail);
+    expect(unconsumedInvitations[0].recipientEmail).toBe(loserEmail);
 
     const winnerOwns = await WalletCredentialRepository.userOwnsCredential(winnerUserId, credIdRaced);
     expect(winnerOwns).toBe(true);
@@ -1147,18 +1167,19 @@ describe("CREDVAIL PostgreSQL Live Wallet Ownership & Single-Owner Integrity (H1
       await WalletService.claimCredential(
         {
           certificateNumber: certNumRaced,
-          claimToken: tokenB,
-          userEmail: bobEmail,
-          userId: userIdBob,
+          claimToken: loserToken,
+          userEmail: loserEmail,
+          userId: loserUserId,
           userEmailVerified: true,
         },
-        userIdBob
+        loserUserId
       );
     } catch (err: any) {
       secondClaimAfterDeleteAttemptError = err;
     }
     expect(secondClaimAfterDeleteAttemptError).toBeInstanceOf(CredentialAlreadyClaimedError);
     expect(secondClaimAfterDeleteAttemptError.code).toBe("CREDENTIAL_ALREADY_CLAIMED");
+    expect(secondClaimAfterDeleteAttemptError).not.toBeInstanceOf(ClaimAlreadyConsumedError);
 
     // Verify alternate claim API (consumeAtomic) cannot bypass the single-owner invariant
     let consumeAtomicError: any = null;
