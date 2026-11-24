@@ -101,9 +101,104 @@ export function decodeBase58(str: string): Buffer {
   return Buffer.from(bytes.reverse());
 }
 
+export class KmsConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KmsConfigurationError";
+    Object.setPrototypeOf(this, KmsConfigurationError.prototype);
+  }
+}
+
 export class KeyService {
-  private static masterSecret =
-    process.env.SESSION_SECRET || "credvail_master_key_encryption_secret_minimum_32_bytes";
+  private static testMasterKey: string | null = null;
+  private static cachedDerivedKey: Buffer | null = null;
+  private static cachedRawKey: string | null = null;
+
+  /**
+   * Sets a test-specific master key for isolated unit and integration testing.
+   */
+  static setMasterKeyForTesting(base64Key: string | null): void {
+    this.testMasterKey = base64Key;
+    this.cachedDerivedKey = null;
+    this.cachedRawKey = null;
+  }
+
+  /**
+   * Clears the test-specific master key and resets in-memory derivation cache.
+   */
+  static resetMasterKeyForTesting(): void {
+    this.testMasterKey = null;
+    this.cachedDerivedKey = null;
+    this.cachedRawKey = null;
+  }
+
+  /**
+   * Validates and resolves the 32-byte KMS master key, deriving a 32-byte AES key
+   * via HKDF-SHA-256 with explicit domain context.
+   *
+   * Fails closed: throws KmsConfigurationError if the key is missing, malformed,
+   * not canonical Base64, or not exactly 32 decoded bytes.
+   */
+  static resolveMasterKey(): Buffer {
+    const rawKey = this.testMasterKey ?? process.env.KMS_MASTER_KEY;
+
+    if (!rawKey || typeof rawKey !== "string" || rawKey.trim() === "") {
+      throw new KmsConfigurationError(
+        "KMS_MASTER_KEY is not configured. A canonical 32-byte Base64-encoded key is required for issuer key operations."
+      );
+    }
+
+    const trimmed = rawKey.trim();
+
+    // Fast cache check
+    if (this.cachedDerivedKey && this.cachedRawKey === trimmed) {
+      return this.cachedDerivedKey;
+    }
+
+    // Canonical 32-byte Base64 format: exactly 43 Base64 chars followed by '='
+    if (!/^[A-Za-z0-9+/]{43}=$/.test(trimmed)) {
+      throw new KmsConfigurationError(
+        "KMS_MASTER_KEY is malformed: expected a canonical Base64-encoded string representing exactly 32 bytes (44 chars ending with '=')."
+      );
+    }
+
+    const keyBuffer = Buffer.from(trimmed, "base64");
+    if (keyBuffer.length !== 32) {
+      throw new KmsConfigurationError(
+        `KMS_MASTER_KEY has invalid decoded byte length: expected exactly 32 bytes, got ${keyBuffer.length} bytes.`
+      );
+    }
+
+    // Ensure canonical Base64 encoding (reject non-canonical padding bits)
+    if (keyBuffer.toString("base64") !== trimmed) {
+      throw new KmsConfigurationError(
+        "KMS_MASTER_KEY is not canonical Base64: detected non-canonical bit representation."
+      );
+    }
+
+    // Derive 32-byte AES-256-GCM encryption key using HKDF-SHA-256
+    // Bound to explicit CREDVAIL domain context
+    const derivedKey = crypto.hkdfSync(
+      "sha256",
+      keyBuffer,
+      Buffer.alloc(0),
+      "credvail_issuer_private_key_encryption_v1",
+      32
+    );
+
+    this.cachedDerivedKey = Buffer.from(derivedKey);
+    this.cachedRawKey = trimmed;
+
+    return this.cachedDerivedKey;
+  }
+
+  /**
+   * Explicit server runtime startup validation.
+   * Fails closed if KMS_MASTER_KEY is missing or invalid.
+   */
+  static validateMasterKey(): void {
+    this.resolveMasterKey();
+  }
 
   /**
    * Generates a new standard ECDSA P-256 key pair.
@@ -147,7 +242,7 @@ export class KeyService {
    * Encrypts a private key string at rest using AES-256-GCM.
    */
   static encryptPrivateKey(privateKeyPem: string): string {
-    const key = crypto.createHash("sha256").update(this.masterSecret).digest();
+    const key = this.resolveMasterKey();
     const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
 
@@ -175,7 +270,7 @@ export class KeyService {
     const tag = Buffer.from(parts[2], "hex");
     const ciphertext = Buffer.from(parts[3], "hex");
 
-    const key = crypto.createHash("sha256").update(this.masterSecret).digest();
+    const key = this.resolveMasterKey();
     const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
     decipher.setAuthTag(tag);
 
@@ -316,6 +411,29 @@ export class KeyService {
 
     const path = pathParts.slice(1).map((p) => decodeURIComponent(p)).join("/");
     return `https://${domain}/${path}/.well-known/did.json`;
+  }
+
+  /**
+   * Fully reconstitutes all cryptographic public key details (SPKI PEM, RFC 7517 JWK with valid coordinates,
+   * and canonical SHA-256 fingerprint) from a Multibase Base58-BTC string.
+   */
+  static multibaseToPublicKeyDetails(multibase: string): {
+    publicKeyPem: string;
+    publicKeyJwk: EcdsaPublicKeyJwk;
+    fingerprint: string;
+  } {
+    const publicKeyPem = this.multibaseToPublicKeyPem(multibase);
+    const keyObject = crypto.createPublicKey(publicKeyPem);
+    const rawJwk = keyObject.export({ format: "jwk" }) as any;
+    const publicKeyJwk: EcdsaPublicKeyJwk = {
+      kty: "EC",
+      crv: "P-256",
+      x: rawJwk.x,
+      y: rawJwk.y,
+    };
+    const canonicalJwk = canonicalizeJson(publicKeyJwk);
+    const fingerprint = crypto.createHash("sha256").update(canonicalJwk).digest("hex");
+    return { publicKeyPem, publicKeyJwk, fingerprint };
   }
 
   /**

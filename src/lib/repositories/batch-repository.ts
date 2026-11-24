@@ -8,6 +8,7 @@
 
 import { prisma } from "../db.ts";
 import type { BatchStatus } from "../../types/index.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export interface StagedRecipientData {
   id?: string;
@@ -29,6 +30,8 @@ export interface IssuanceBatchRecord {
   id: string;
   tenantId: string;
   templateId: string;
+  templateVersion?: number;
+  templateSnapshot?: any;
   issuerKeyId: string;
   batchNumber: string;
   title: string;
@@ -48,6 +51,8 @@ export interface IssuanceBatchRecord {
 export interface CreateBatchInput {
   tenantId: string;
   templateId: string;
+  templateVersion?: number;
+  templateSnapshot?: any;
   issuerKeyId?: string;
   batchNumber?: string;
   title?: string;
@@ -57,10 +62,21 @@ export interface CreateBatchInput {
 export class BatchRepository {
   private static inMemoryBatches = new Map<string, IssuanceBatchRecord>();
   private static inMemoryRecipients = new Map<string, Array<{ id: string; tenantId: string; email: string; fullName: string; certNumber?: string }>>();
-  private static useMemory =
-    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-      ? false
-      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static manualMemoryOverride: boolean | null = null;
+
+  public static setUseMemory(val: boolean): void {
+    this.manualMemoryOverride = val;
+  }
+
+  public static getUseMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.manualMemoryOverride !== null) return this.manualMemoryOverride;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  }
+
+  private static get useMemory(): boolean {
+    return this.getUseMemory();
+  }
 
   /**
    * Resets in-memory stores for hermetic test execution.
@@ -68,6 +84,7 @@ export class BatchRepository {
   static resetInMemoryStore(): void {
     this.inMemoryBatches.clear();
     this.inMemoryRecipients.clear();
+    this.manualMemoryOverride = null;
   }
 
   /**
@@ -95,6 +112,8 @@ export class BatchRepository {
       id: `batch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       tenantId: input.tenantId,
       templateId: input.templateId,
+      templateVersion: input.templateVersion || 1,
+      templateSnapshot: input.templateSnapshot || null,
       issuerKeyId,
       batchNumber,
       title: batchTitle,
@@ -128,8 +147,8 @@ export class BatchRepository {
         // Store recipients in memory/DB
         this.inMemoryBatches.set(created.id, batchRecord);
         return batchRecord;
-      } catch {
-        // Fall back to in-memory store
+      } catch (err) {
+        handleRepositoryError("BatchRepository.createBatch", err);
       }
     }
 
@@ -157,18 +176,22 @@ export class BatchRepository {
    * Finds a batch by ID, scoped strictly to the specified tenantId.
    */
   static async findBatchById(tenantId: string, batchId: string): Promise<IssuanceBatchRecord | null> {
-    const batch = this.inMemoryBatches.get(batchId);
-    if (batch && batch.tenantId === tenantId) {
-      return batch;
+    if (this.useMemory) {
+      const batch = this.inMemoryBatches.get(batchId);
+      if (batch && batch.tenantId === tenantId) {
+        return batch;
+      }
+      return null;
     }
 
-    if (!this.useMemory && prisma) {
+    if (prisma) {
       try {
         const found = await prisma.issuanceBatch.findFirst({
           where: { id: batchId, tenantId },
           include: { template: true },
         });
         if (found) {
+          const batch = this.inMemoryBatches.get(batchId);
           return {
             id: found.id,
             tenantId: found.tenantId,
@@ -189,8 +212,8 @@ export class BatchRepository {
             updatedAt: found.updatedAt,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("BatchRepository.findBatchById", err);
       }
     }
 
@@ -201,50 +224,52 @@ export class BatchRepository {
    * Lists batches for a tenant, ordered by createdAt descending.
    */
   static async listBatches(tenantId: string): Promise<IssuanceBatchRecord[]> {
-    const list: IssuanceBatchRecord[] = [];
-
-    for (const batch of this.inMemoryBatches.values()) {
-      if (batch.tenantId === tenantId) {
-        list.push(batch);
+    if (this.useMemory) {
+      const list: IssuanceBatchRecord[] = [];
+      for (const batch of this.inMemoryBatches.values()) {
+        if (batch.tenantId === tenantId) {
+          list.push(batch);
+        }
       }
+      return list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     }
 
-    if (!this.useMemory && prisma) {
+    if (prisma) {
       try {
         const dbBatches = await prisma.issuanceBatch.findMany({
           where: { tenantId },
           orderBy: { createdAt: "desc" },
         });
 
+        const list: IssuanceBatchRecord[] = [];
         for (const dbb of dbBatches) {
-          if (!list.some((b) => b.id === dbb.id)) {
-            list.push({
-              id: dbb.id,
-              tenantId: dbb.tenantId,
-              templateId: dbb.templateId,
-              issuerKeyId: dbb.issuerKeyId,
-              batchNumber: dbb.batchNumber,
-              title: `Batch ${dbb.batchNumber}`,
-              merkleRoot: dbb.merkleRoot,
-              leafCount: dbb.leafCount,
-              onChainTxHash: dbb.onChainTxHash,
-              blockchainBlockNumber: dbb.blockchainBlockNumber,
-              status: dbb.status as BatchStatus,
-              errorSummary: dbb.errorSummary,
-              stagedRecipients: [],
-              validCount: dbb.leafCount,
-              invalidCount: 0,
-              createdAt: dbb.createdAt,
-              updatedAt: dbb.updatedAt,
-            });
-          }
+          list.push({
+            id: dbb.id,
+            tenantId: dbb.tenantId,
+            templateId: dbb.templateId,
+            issuerKeyId: dbb.issuerKeyId,
+            batchNumber: dbb.batchNumber,
+            title: `Batch ${dbb.batchNumber}`,
+            merkleRoot: dbb.merkleRoot,
+            leafCount: dbb.leafCount,
+            onChainTxHash: dbb.onChainTxHash,
+            blockchainBlockNumber: dbb.blockchainBlockNumber,
+            status: dbb.status as BatchStatus,
+            errorSummary: dbb.errorSummary,
+            stagedRecipients: [],
+            validCount: dbb.leafCount,
+            invalidCount: 0,
+            createdAt: dbb.createdAt,
+            updatedAt: dbb.updatedAt,
+          });
         }
-      } catch {
-        // Fall back
+        return list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      } catch (err) {
+        handleRepositoryError("BatchRepository.listBatches", err);
       }
     }
 
-    return list.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return [];
   }
 
   /**
@@ -280,8 +305,8 @@ export class BatchRepository {
             errorSummary: details?.errorSummary,
           },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("BatchRepository.updateBatchStatus", err);
       }
     }
 
@@ -308,8 +333,8 @@ export class BatchRepository {
         for (const r of recipients) {
           emails.add(r.email.toLowerCase());
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("BatchRepository.getExistingRecipientEmails", err);
       }
     }
 
@@ -336,8 +361,8 @@ export class BatchRepository {
         for (const rec of records) {
           certs.add(rec.certificateNumber);
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("BatchRepository.getExistingCertificateNumbers", err);
       }
     }
 
@@ -363,8 +388,8 @@ export class BatchRepository {
         await prisma.issuanceBatch.deleteMany({
           where: { id: batchId, tenantId },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("BatchRepository.deleteBatch", err);
       }
     }
 

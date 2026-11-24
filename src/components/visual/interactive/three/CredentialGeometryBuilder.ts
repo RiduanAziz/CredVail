@@ -1,442 +1,371 @@
 import * as THREE from "three";
 import { ResourceManager } from "./ResourceManager";
 
-export interface CredentialSceneMeshes {
-  masterGroup: THREE.Group;
-  cardGroup: THREE.Group;
-  cardMesh: THREE.Mesh;
-  frostedGlassMesh: THREE.Mesh;
-  frostedGlassMat: THREE.MeshPhysicalMaterial;
-  frostedEdgeMesh: THREE.Mesh;
-  frostedEdgeMat: THREE.MeshBasicMaterial;
-  sealGroup: THREE.Group;
-  plinthGroup: THREE.Group;
-  backdropGroup: THREE.Group;
-  shieldGroup: THREE.Group;
-  magnifierGroup: THREE.Group;
+export interface DocumentDimensions {
+  width: number;
+  height: number;
+  cornerRadius: number;
+  coreDepth: number;
+  bevelThickness: number;
+  bevelSize: number;
+}
+
+export const DOCUMENT_SPEC: DocumentDimensions = {
+  width: 2.2,
+  height: 2.95,
+  cornerRadius: 0.06,
+  coreDepth: 0.046,
+  bevelThickness: 0.015,
+  bevelSize: 0.015,
+};
+
+export interface BuiltCredentialScene {
+  credentialGroup: THREE.Group;
+  shadowDisc: THREE.Mesh;
+  hitZones: THREE.Mesh[];
 }
 
 export class CredentialGeometryBuilder {
-  public static buildScene(
-    frontTexture: THREE.CanvasTexture,
-    resourceManager: ResourceManager
-  ): CredentialSceneMeshes {
-    const masterGroup = new THREE.Group();
-
-    // -------------------------------------------------------------
-    // 1. Certificate Plaque (Reference 01)
-    // -------------------------------------------------------------
-    const cardGroup = new THREE.Group();
-    const cardWidth = 2.45;
-    const cardHeight = 3.32;
-    const cardRadius = 0.12;
-
+  private static createRoundedRectShape(
+    width: number,
+    height: number,
+    radius: number
+  ): THREE.Shape {
     const shape = new THREE.Shape();
-    const x0 = -cardWidth / 2;
-    const y0 = -cardHeight / 2;
-    const w = cardWidth;
-    const h = cardHeight;
-    const r = cardRadius;
+    const hw = width / 2;
+    const hh = height / 2;
+    const r = Math.min(radius, hw, hh);
 
-    shape.moveTo(x0 + r, y0);
-    shape.lineTo(x0 + w - r, y0);
-    shape.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + r);
-    shape.lineTo(x0 + w, y0 + h - r);
-    shape.quadraticCurveTo(x0 + w, y0 + h, x0 + w - r, y0 + h);
-    shape.lineTo(x0 + r, y0 + h);
-    shape.quadraticCurveTo(x0, y0 + h, x0, y0 + h - r);
-    shape.lineTo(x0, y0 + r);
-    shape.quadraticCurveTo(x0, y0, x0 + r, y0);
+    shape.moveTo(-hw + r, -hh);
+    shape.lineTo(hw - r, -hh);
+    shape.quadraticCurveTo(hw, -hh, hw, -hh + r);
+    shape.lineTo(hw, hh - r);
+    shape.quadraticCurveTo(hw, hh, hw - r, hh);
+    shape.lineTo(-hw + r, hh);
+    shape.quadraticCurveTo(-hw, hh, -hw, hh - r);
+    shape.lineTo(-hw, -hh + r);
+    shape.quadraticCurveTo(-hw, -hh, -hw + r, -hh);
+    return shape;
+  }
 
-    const cardGeo = resourceManager.trackGeometry(
+  private static createNormalizedPlateGeometry(
+    width: number,
+    height: number,
+    radius: number,
+    resourceManager: ResourceManager
+  ): THREE.BufferGeometry {
+    const shape = this.createRoundedRectShape(width, height, radius);
+    const geom = resourceManager.trackGeometry(new THREE.ShapeGeometry(shape, 12));
+    const pos = geom.attributes.position;
+    const uv = geom.attributes.uv;
+
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      uv.setXY(i, (x + width / 2) / width, (y + height / 2) / height);
+    }
+    uv.needsUpdate = true;
+    return geom;
+  }
+
+  private static createFlutedRosetteGeometry(
+    outerRadius = 0.23,
+    flutes = 24,
+    resourceManager: ResourceManager
+  ): THREE.BufferGeometry {
+    const shape = new THREE.Shape();
+    const steps = flutes * 6;
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * Math.PI * 2;
+      const scallop = Math.cos(angle * flutes) * 0.014;
+      const r = outerRadius + scallop;
+      const x = Math.cos(angle) * r;
+      const y = Math.sin(angle) * r;
+      if (i === 0) shape.moveTo(x, y);
+      else shape.lineTo(x, y);
+    }
+    return resourceManager.trackGeometry(
       new THREE.ExtrudeGeometry(shape, {
-        depth: 0.07,
+        depth: 0.024,
         bevelEnabled: true,
-        bevelSegments: 4,
-        steps: 1,
-        bevelSize: 0.02,
-        bevelThickness: 0.02,
-      })
-    );
-    cardGeo.center();
-
-    // Front: Premium Satin Finish with high-res canvas map
-    const frontFaceMat = resourceManager.trackMaterial(
-      new THREE.MeshPhysicalMaterial({
-        map: frontTexture,
-        roughness: 0.22,
-        metalness: 0.06,
-        clearcoat: 0.85,
-        clearcoatRoughness: 0.12,
-        reflectivity: 0.88,
-        ior: 1.52,
-      })
-    );
-
-    // Sides & Back: Pure Porcelain White with soft titanium sheen
-    const titaniumBackMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0xF8FAFC,
-        metalness: 0.28,
-        roughness: 0.32,
-      })
-    );
-
-    const cardMesh = new THREE.Mesh(cardGeo, [frontFaceMat, titaniumBackMat]);
-    cardMesh.castShadow = true;
-    cardMesh.receiveShadow = true;
-    cardGroup.add(cardMesh);
-
-    // -------------------------------------------------------------
-    // 2. Stratified Frosted Glass Security Sheet (Reference 03)
-    // -------------------------------------------------------------
-    const glassWidth = 2.32;
-    const glassHeight = 3.18;
-    const glassRadius = 0.09;
-    const glassShape = new THREE.Shape();
-    const gx0 = -glassWidth / 2;
-    const gy0 = -glassHeight / 2;
-    const gw = glassWidth;
-    const gh = glassHeight;
-    const gr = glassRadius;
-
-    glassShape.moveTo(gx0 + gr, gy0);
-    glassShape.lineTo(gx0 + gw - gr, gy0);
-    glassShape.quadraticCurveTo(gx0 + gw, gy0, gx0 + gw, gy0 + gr);
-    glassShape.lineTo(gx0 + gw, gy0 + gh - gr);
-    glassShape.quadraticCurveTo(gx0 + gw, gy0 + gh, gx0 + gw - gr, gy0 + gh);
-    glassShape.lineTo(gx0 + gr, gy0 + gh);
-    glassShape.quadraticCurveTo(gx0, gy0 + gh, gx0, gy0 + gh - gr);
-    glassShape.lineTo(gx0, gy0 + gr);
-    glassShape.quadraticCurveTo(gx0, gy0, gx0 + gr, gy0);
-
-    const glassGeo = resourceManager.trackGeometry(
-      new THREE.ExtrudeGeometry(glassShape, {
-        depth: 0.025,
-        bevelEnabled: true,
+        bevelThickness: 0.008,
+        bevelSize: 0.007,
         bevelSegments: 3,
-        steps: 1,
-        bevelSize: 0.012,
-        bevelThickness: 0.012,
+        curveSegments: 12,
       })
     );
-    glassGeo.center();
+  }
 
-    const frostedGlassMat = resourceManager.trackMaterial(
-      new THREE.MeshPhysicalMaterial({
-        color: 0xF5F3FF,
-        transmission: 0.65,
-        opacity: 0.35,
-        transparent: true,
-        roughness: 0.38,
-        metalness: 0.05,
-        ior: 1.48,
-        clearcoat: 0.8,
-      })
-    );
-    const frostedGlassMesh = new THREE.Mesh(glassGeo, frostedGlassMat);
-    frostedGlassMesh.position.z = 0.065;
-    cardGroup.add(frostedGlassMesh);
+  private static createRibbonTailGeometry(
+    width = 0.115,
+    length = 0.34,
+    resourceManager: ResourceManager
+  ): THREE.BufferGeometry {
+    const shape = new THREE.Shape();
+    const hw = width / 2;
+    shape.moveTo(-hw, 0);
+    shape.lineTo(hw, 0);
+    shape.lineTo(hw, -length);
+    shape.lineTo(0, -length + 0.075); // Classic notched swallowtail
+    shape.lineTo(-hw, -length);
+    shape.closePath();
 
-    // Glowing Purple/Violet Edge Ribbon (Ref 03)
-    const edgeGeo = resourceManager.trackGeometry(
-      new THREE.RingGeometry(1.22, 1.25, 64)
-    );
-    const frostedEdgeMat = resourceManager.trackMaterial(
-      new THREE.MeshBasicMaterial({
-        color: 0x8B5CF6,
-        transparent: true,
-        opacity: 0.25,
-        side: THREE.DoubleSide,
-      })
-    );
-    const frostedEdgeMesh = new THREE.Mesh(edgeGeo, frostedEdgeMat);
-    frostedEdgeMesh.scale.set(1.0, 1.34, 1);
-    frostedEdgeMesh.position.z = 0.082;
-    cardGroup.add(frostedEdgeMesh);
-
-    // -------------------------------------------------------------
-    // 3. Ribbon Seal Medallion (Reference 01 & Reference 03)
-    // -------------------------------------------------------------
-    const sealGroup = new THREE.Group();
-    sealGroup.position.set(0.78, -1.18, 0.075);
-
-    // Outer scalloped medallion ring
-    const sealBaseGeo = resourceManager.trackGeometry(
-      new THREE.CylinderGeometry(0.28, 0.28, 0.035, 32)
-    );
-    const sealBaseMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0x1E3A8A,
-        metalness: 0.75,
-        roughness: 0.25,
-      })
-    );
-    const sealBaseMesh = new THREE.Mesh(sealBaseGeo, sealBaseMat);
-    sealBaseMesh.rotation.x = Math.PI / 2;
-    sealGroup.add(sealBaseMesh);
-
-    // Inner embossed center disc
-    const sealInnerGeo = resourceManager.trackGeometry(
-      new THREE.CylinderGeometry(0.20, 0.20, 0.042, 32)
-    );
-    const sealInnerMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0x2563EB,
-        metalness: 0.65,
-        roughness: 0.3,
-      })
-    );
-    const sealInnerMesh = new THREE.Mesh(sealInnerGeo, sealInnerMat);
-    sealInnerMesh.rotation.x = Math.PI / 2;
-    sealGroup.add(sealInnerMesh);
-
-    // Gold core rim
-    const sealRimGeo = resourceManager.trackGeometry(
-      new THREE.TorusGeometry(0.18, 0.015, 16, 48)
-    );
-    const sealRimMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0xF59E0B,
-        metalness: 0.9,
-        roughness: 0.2,
-      })
-    );
-    const sealRimMesh = new THREE.Mesh(sealRimGeo, sealRimMat);
-    sealRimMesh.position.z = 0.026;
-    sealGroup.add(sealRimMesh);
-
-    // Two Hanging Ribbon Tails (Ref 01)
-    const ribbonTailGeo = resourceManager.trackGeometry(
-      new THREE.BoxGeometry(0.12, 0.42, 0.015)
-    );
-    const ribbonTailMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0x1E3A8A,
-        metalness: 0.6,
-        roughness: 0.35,
-      })
-    );
-
-    const leftTail = new THREE.Mesh(ribbonTailGeo, ribbonTailMat);
-    leftTail.position.set(-0.06, -0.26, -0.01);
-    leftTail.rotation.z = 0.22;
-    sealGroup.add(leftTail);
-
-    const rightTail = new THREE.Mesh(ribbonTailGeo, ribbonTailMat);
-    rightTail.position.set(0.06, -0.26, -0.01);
-    rightTail.rotation.z = -0.22;
-    sealGroup.add(rightTail);
-
-    cardGroup.add(sealGroup);
-    masterGroup.add(cardGroup);
-
-    // -------------------------------------------------------------
-    // 4. Studio Pedestal / Plinth (Reference 01)
-    // -------------------------------------------------------------
-    const plinthGroup = new THREE.Group();
-    plinthGroup.position.set(0, -1.82, 0);
-
-    const plinthGeo = resourceManager.trackGeometry(
-      new THREE.CylinderGeometry(2.35, 2.38, 0.16, 64)
-    );
-    const plinthMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0xFFFFFF,
-        metalness: 0.08,
-        roughness: 0.25,
-      })
-    );
-    const plinthMesh = new THREE.Mesh(plinthGeo, plinthMat);
-    plinthMesh.receiveShadow = true;
-    plinthGroup.add(plinthMesh);
-
-    // Plinth Blue/Titanium Base Accent Ring
-    const plinthRingGeo = resourceManager.trackGeometry(
-      new THREE.TorusGeometry(2.37, 0.018, 16, 64)
-    );
-    const plinthRingMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0x1E293B,
-        metalness: 0.85,
-        roughness: 0.25,
-      })
-    );
-    const plinthRing = new THREE.Mesh(plinthRingGeo, plinthRingMat);
-    plinthRing.rotation.x = Math.PI / 2;
-    plinthRing.position.y = -0.07;
-    plinthGroup.add(plinthRing);
-
-    masterGroup.add(plinthGroup);
-
-    // -------------------------------------------------------------
-    // 5. Circular Backdrop Disc & Halo (Reference 01)
-    // -------------------------------------------------------------
-    const backdropGroup = new THREE.Group();
-    backdropGroup.position.set(0, 0.1, -1.15);
-
-    const discGeo = resourceManager.trackGeometry(
-      new THREE.CircleGeometry(2.7, 64)
-    );
-    const discMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0xF8FAFC,
-        metalness: 0.05,
-        roughness: 0.65,
-      })
-    );
-    const discMesh = new THREE.Mesh(discGeo, discMat);
-    backdropGroup.add(discMesh);
-
-    // Luminous Halo Ring
-    const haloGeo = resourceManager.trackGeometry(
-      new THREE.RingGeometry(2.68, 2.76, 64)
-    );
-    const haloMat = resourceManager.trackMaterial(
-      new THREE.MeshBasicMaterial({
-        color: 0xE0E7FF,
-        side: THREE.DoubleSide,
-      })
-    );
-    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-    backdropGroup.add(haloMesh);
-
-    masterGroup.add(backdropGroup);
-
-    // -------------------------------------------------------------
-    // 6. Flanking Trust Metaphors: Shield & Magnifying Glass (Reference 01)
-    // -------------------------------------------------------------
-    // Left: 3D Metallic Shield with checkmark
-    const shieldGroup = new THREE.Group();
-    shieldGroup.position.set(-1.88, -0.45, 0.18);
-    shieldGroup.rotation.y = 0.38; // angled toward the certificate
-
-    const shieldShape = new THREE.Shape();
-    shieldShape.moveTo(0, 0.72);
-    shieldShape.quadraticCurveTo(0.48, 0.65, 0.48, 0.2);
-    shieldShape.quadraticCurveTo(0.48, -0.35, 0, -0.72);
-    shieldShape.quadraticCurveTo(-0.48, -0.35, -0.48, 0.2);
-    shieldShape.quadraticCurveTo(-0.48, 0.65, 0, 0.72);
-
-    const shieldGeo = resourceManager.trackGeometry(
-      new THREE.ExtrudeGeometry(shieldShape, {
-        depth: 0.08,
+    return resourceManager.trackGeometry(
+      new THREE.ExtrudeGeometry(shape, {
+        depth: 0.011,
         bevelEnabled: true,
-        bevelSegments: 3,
-        steps: 1,
-        bevelSize: 0.02,
-        bevelThickness: 0.02,
-      })
-    );
-    shieldGeo.center();
-
-    const shieldMat = resourceManager.trackMaterial(
-      new THREE.MeshStandardMaterial({
-        color: 0xE2E8F0,
-        metalness: 0.88,
-        roughness: 0.22,
-      })
-    );
-    const shieldMesh = new THREE.Mesh(shieldGeo, shieldMat);
-    shieldGroup.add(shieldMesh);
-
-    // Raised Checkmark in relief inside shield
-    const checkShape = new THREE.Shape();
-    checkShape.moveTo(-0.18, 0.02);
-    checkShape.lineTo(-0.06, -0.12);
-    checkShape.lineTo(0.20, 0.16);
-    checkShape.lineTo(0.14, 0.22);
-    checkShape.lineTo(-0.06, -0.02);
-    checkShape.lineTo(-0.12, 0.06);
-    checkShape.closePath();
-
-    const checkGeo = resourceManager.trackGeometry(
-      new THREE.ExtrudeGeometry(checkShape, {
-        depth: 0.03,
-        bevelEnabled: true,
+        bevelThickness: 0.003,
+        bevelSize: 0.003,
         bevelSegments: 2,
-        steps: 1,
-        bevelSize: 0.01,
-        bevelThickness: 0.01,
       })
     );
-    checkGeo.center();
+  }
 
-    const checkMat = resourceManager.trackMaterial(
+  private static createContactShadowTexture(
+    resourceManager: ResourceManager
+  ): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const grad = ctx.createRadialGradient(128, 64, 6, 128, 64, 118);
+      grad.addColorStop(0, "rgba(11, 23, 42, 0.36)");
+      grad.addColorStop(0.52, "rgba(11, 23, 42, 0.12)");
+      grad.addColorStop(1, "rgba(11, 23, 42, 0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 256, 128);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    return resourceManager.trackTexture(tex);
+  }
+
+  public static buildCredentialObject(
+    frontTex: THREE.CanvasTexture,
+    reverseTex: THREE.CanvasTexture,
+    bumpTex: THREE.CanvasTexture,
+    resourceManager: ResourceManager
+  ): BuiltCredentialScene {
+    const credentialGroup = new THREE.Group();
+
+    const { width, height, cornerRadius, coreDepth, bevelThickness, bevelSize } =
+      DOCUMENT_SPEC;
+
+    // 1. Core Architectural Beveled Chassis
+    const coreShape = this.createRoundedRectShape(
+      width - bevelSize * 2,
+      height - bevelSize * 2,
+      cornerRadius
+    );
+    const coreGeo = resourceManager.trackGeometry(
+      new THREE.ExtrudeGeometry(coreShape, {
+        depth: coreDepth,
+        bevelEnabled: true,
+        bevelThickness,
+        bevelSize,
+        bevelSegments: 5,
+        curveSegments: 16,
+      })
+    );
+    coreGeo.center();
+
+    const coreMat = resourceManager.trackMaterial(
       new THREE.MeshStandardMaterial({
-        color: 0x2563EB,
-        metalness: 0.5,
-        roughness: 0.3,
+        color: 0xdbe3ee,
+        roughness: 0.34,
+        metalness: 0.38,
       })
     );
-    const checkMesh = new THREE.Mesh(checkGeo, checkMat);
-    checkMesh.position.z = 0.065;
-    shieldGroup.add(checkMesh);
+    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+    coreMesh.castShadow = true;
+    coreMesh.receiveShadow = true;
+    credentialGroup.add(coreMesh);
 
-    masterGroup.add(shieldGroup);
-
-    // Right: 3D Chrome Magnifying Glass with Glass Lens
-    const magnifierGroup = new THREE.Group();
-    magnifierGroup.position.set(1.82, -0.52, 0.24);
-    magnifierGroup.rotation.y = -0.42; // angled toward the certificate
-    magnifierGroup.rotation.z = -0.22;
-
-    // Outer rim
-    const rimGeo = resourceManager.trackGeometry(
-      new THREE.TorusGeometry(0.48, 0.045, 16, 48)
+    // 2. Whisper-Thin Precision Cobalt/Indigo Optical Edge Inlay (Ref 01 accent)
+    const trimShape = this.createRoundedRectShape(
+      width - bevelSize * 1.45,
+      height - bevelSize * 1.45,
+      cornerRadius
     );
-    const chromeMat = resourceManager.trackMaterial(
+    const trimGeo = resourceManager.trackGeometry(
+      new THREE.ExtrudeGeometry(trimShape, {
+        depth: 0.012,
+        bevelEnabled: true,
+        bevelThickness: 0.003,
+        bevelSize: 0.003,
+        bevelSegments: 2,
+        curveSegments: 14,
+      })
+    );
+    trimGeo.center();
+
+    const trimMat = resourceManager.trackMaterial(
       new THREE.MeshStandardMaterial({
-        color: 0xE2E8F0,
-        metalness: 0.95,
-        roughness: 0.15,
+        color: 0x0f1d38,
+        emissive: 0x000000,
+        emissiveIntensity: 0,
+        roughness: 0.32,
+        metalness: 0.45,
       })
     );
-    const rimMesh = new THREE.Mesh(rimGeo, chromeMat);
-    magnifierGroup.add(rimMesh);
+    const trimMesh = new THREE.Mesh(trimGeo, trimMat);
+    credentialGroup.add(trimMesh);
 
-    // Optical Glass Lens
-    const lensGeo = resourceManager.trackGeometry(
-      new THREE.CylinderGeometry(0.46, 0.46, 0.02, 32)
+    // 3. Soft Porcelain Archival Front Plate
+    const faceZ = coreDepth / 2 + bevelThickness + 0.0012;
+    const plateGeo = this.createNormalizedPlateGeometry(
+      width - 0.042,
+      height - 0.042,
+      cornerRadius * 0.82,
+      resourceManager
     );
-    const lensMat = resourceManager.trackMaterial(
+    const frontMat = resourceManager.trackMaterial(
       new THREE.MeshPhysicalMaterial({
-        color: 0xFFFFFF,
-        transmission: 0.92,
-        opacity: 0.6,
-        transparent: true,
-        roughness: 0.05,
-        ior: 1.52,
+        map: frontTex,
+        bumpMap: bumpTex,
+        bumpScale: 0.0022,
+        roughness: 0.58,
+        metalness: 0.03,
+        clearcoat: 0.12,
+        clearcoatRoughness: 0.44,
       })
     );
-    const lensMesh = new THREE.Mesh(lensGeo, lensMat);
-    lensMesh.rotation.x = Math.PI / 2;
-    magnifierGroup.add(lensMesh);
+    const frontMesh = new THREE.Mesh(plateGeo, frontMat);
+    frontMesh.position.z = faceZ;
+    frontMesh.receiveShadow = true;
+    credentialGroup.add(frontMesh);
 
-    // Cylindrical Handle angled down-right
-    const handleGeo = resourceManager.trackGeometry(
-      new THREE.CylinderGeometry(0.042, 0.038, 0.72, 24)
+    // 4. Detailed Reverse Security Plate
+    const reverseMat = resourceManager.trackMaterial(
+      new THREE.MeshPhysicalMaterial({
+        map: reverseTex,
+        bumpMap: bumpTex,
+        bumpScale: 0.0022,
+        roughness: 0.62,
+        metalness: 0.04,
+        clearcoat: 0.08,
+        clearcoatRoughness: 0.5,
+      })
     );
-    const handleMesh = new THREE.Mesh(handleGeo, chromeMat);
-    handleMesh.position.set(0.46, -0.46, 0);
-    handleMesh.rotation.z = Math.PI / 4;
-    magnifierGroup.add(handleMesh);
+    const reverseMesh = new THREE.Mesh(plateGeo, reverseMat);
+    reverseMesh.position.z = -faceZ;
+    reverseMesh.rotation.y = Math.PI;
+    reverseMesh.receiveShadow = true;
+    credentialGroup.add(reverseMesh);
 
-    masterGroup.add(magnifierGroup);
+    // 5. Physically Modeled 3D Embossed Navy Rosette Seal & Ribbons (Bottom-Right)
+    const sealGroup = new THREE.Group();
+    sealGroup.position.set(0.57, -0.84, faceZ + 0.002);
 
-    return {
-      masterGroup,
-      cardGroup,
-      cardMesh,
-      frostedGlassMesh,
-      frostedGlassMat,
-      frostedEdgeMesh,
-      frostedEdgeMat,
-      sealGroup,
-      plinthGroup,
-      backdropGroup,
-      shieldGroup,
-      magnifierGroup,
+    const navySatinMat = resourceManager.trackMaterial(
+      new THREE.MeshStandardMaterial({
+        color: 0x1b3b6f,
+        roughness: 0.38,
+        metalness: 0.22,
+      })
+    );
+    const navyDeepMat = resourceManager.trackMaterial(
+      new THREE.MeshStandardMaterial({
+        color: 0x132b52,
+        roughness: 0.44,
+        metalness: 0.18,
+      })
+    );
+    const silverInlayMat = resourceManager.trackMaterial(
+      new THREE.MeshStandardMaterial({
+        color: 0x8ea9d4,
+        roughness: 0.28,
+        metalness: 0.55,
+      })
+    );
+
+    // Left & Right Angled Beveled Ribbon Tails
+    const ribbonGeo = this.createRibbonTailGeometry(0.115, 0.34, resourceManager);
+    const leftRibbon = new THREE.Mesh(ribbonGeo, navyDeepMat);
+    leftRibbon.position.set(-0.045, -0.05, 0.002);
+    leftRibbon.rotation.z = -0.22;
+    leftRibbon.castShadow = true;
+    leftRibbon.receiveShadow = true;
+    sealGroup.add(leftRibbon);
+
+    const rightRibbon = new THREE.Mesh(ribbonGeo, navySatinMat);
+    rightRibbon.position.set(0.045, -0.05, 0.006);
+    rightRibbon.rotation.z = 0.22;
+    rightRibbon.castShadow = true;
+    rightRibbon.receiveShadow = true;
+    sealGroup.add(rightRibbon);
+
+    // Scalloped Fluted Rosette Base
+    const rosetteGeo = this.createFlutedRosetteGeometry(0.215, 24, resourceManager);
+    const rosetteMesh = new THREE.Mesh(rosetteGeo, navySatinMat);
+    rosetteMesh.position.z = 0.014;
+    rosetteMesh.castShadow = true;
+    rosetteMesh.receiveShadow = true;
+    sealGroup.add(rosetteMesh);
+
+    // Inner Stepped Coin Disc
+    const innerCoinGeo = resourceManager.trackGeometry(
+      new THREE.CylinderGeometry(0.152, 0.162, 0.016, 40)
+    );
+    innerCoinGeo.rotateX(Math.PI / 2);
+    const innerCoin = new THREE.Mesh(innerCoinGeo, navyDeepMat);
+    innerCoin.position.z = 0.045;
+    innerCoin.castShadow = true;
+    sealGroup.add(innerCoin);
+
+    // Fine Embossed Concentric Rim Ring
+    const ringGeo = resourceManager.trackGeometry(
+      new THREE.TorusGeometry(0.132, 0.0065, 14, 48)
+    );
+    const ringMesh = new THREE.Mesh(ringGeo, silverInlayMat);
+    ringMesh.position.z = 0.053;
+    sealGroup.add(ringMesh);
+
+    // Center Raised Medallion Emblem Disc
+    const centerDiscGeo = resourceManager.trackGeometry(
+      new THREE.CylinderGeometry(0.085, 0.092, 0.009, 32)
+    );
+    centerDiscGeo.rotateX(Math.PI / 2);
+    const centerDisc = new THREE.Mesh(centerDiscGeo, navySatinMat);
+    centerDisc.position.z = 0.055;
+    sealGroup.add(centerDisc);
+
+    credentialGroup.add(sealGroup);
+
+    // 6. Invisible Interactive Raycast Hotspots for Region Inspection (Ref 03)
+    const hitMat = resourceManager.trackMaterial(
+      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
+    );
+    const hitZones: THREE.Mesh[] = [];
+    const addHitZone = (presetId: string, w: number, h: number, x: number, y: number) => {
+      const geo = resourceManager.trackGeometry(new THREE.PlaneGeometry(w, h));
+      const mesh = new THREE.Mesh(geo, hitMat);
+      mesh.position.set(x, y, faceZ + 0.07);
+      mesh.userData = { presetId };
+      credentialGroup.add(mesh);
+      hitZones.push(mesh);
     };
+
+    addHitZone("identity", 1.85, 1.35, 0, 0.58);
+    addHitZone("authorization", 1.15, 0.92, -0.38, -0.78);
+    addHitZone("seal", 0.82, 0.92, 0.56, -0.78);
+
+    // 7. Grounded Architectural Studio Contact Shadow Disc
+    const shadowTex = this.createContactShadowTexture(resourceManager);
+    const shadowGeo = resourceManager.trackGeometry(new THREE.PlaneGeometry(2.8, 0.95));
+    const shadowMat = resourceManager.trackMaterial(
+      new THREE.MeshBasicMaterial({
+        map: shadowTex,
+        transparent: true,
+        opacity: 0.42,
+        depthWrite: false,
+      })
+    );
+    const shadowDisc = new THREE.Mesh(shadowGeo, shadowMat);
+    shadowDisc.rotation.x = -Math.PI / 2;
+    shadowDisc.position.set(0, -1.78, 0);
+
+    return { credentialGroup, shadowDisc, hitZones };
   }
 }

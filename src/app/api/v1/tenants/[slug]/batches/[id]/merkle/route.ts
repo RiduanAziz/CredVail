@@ -13,7 +13,7 @@ export async function GET(
 ) {
   try {
     const { slug, id } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "credentials:read");
 
     const tenant = await tenantRepo.findBySlug(slug);
     if (!tenant) {

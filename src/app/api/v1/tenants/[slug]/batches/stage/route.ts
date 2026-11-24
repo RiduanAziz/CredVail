@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { slug } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "batches:create");
 
     const body = await request.json();
     const validatedInput = stageBatchInputSchema.parse(body);

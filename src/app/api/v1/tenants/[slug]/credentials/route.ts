@@ -3,6 +3,8 @@ import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { assertTenantPermission } from "@/lib/auth/rbac";
 import { CredentialRepository } from "@/lib/repositories/credential-repository";
 import { TenantRepository } from "@/lib/repositories/tenant-repository";
+import { CredentialIssuanceService } from "@/lib/services/credential-issuance-service";
+import { checkApiRateLimit, createRateLimitResponse } from "@/lib/services/api-rate-limiter";
 import { CredentialState } from "@/types";
 
 const tenantRepo = new TenantRepository();
@@ -13,7 +15,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "credentials:read");
 
     const tenant = await tenantRepo.findBySlug(slug);
     if (!tenant) {
@@ -70,6 +72,56 @@ export async function GET(
         },
       },
       { status: isForbidden ? 403 : 400 }
+    );
+  }
+}
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  try {
+    const { slug } = await params;
+    const ctx = extractTenantContext(request, slug, "batches:create");
+
+    const rateLimit = await checkApiRateLimit({
+      identifier: `${ctx.session.sub}:${slug}`,
+      scope: "credentials:issue-single",
+      maxAttempts: 30,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit.retryAfter || 60);
+    }
+
+    const body = await request.json();
+    const result = await CredentialIssuanceService.issueSingleCredential(
+      slug,
+      body,
+      ctx.session,
+      request.nextUrl.origin
+    );
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: result,
+      },
+      { status: 201 }
+    );
+  } catch (error: any) {
+    const isForbidden = error.name === "AuthorizationError" || error.message?.includes("Forbidden");
+    const isNotFound = error.message?.includes("not found");
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: isForbidden ? "FORBIDDEN" : isNotFound ? "NOT_FOUND" : "ISSUANCE_FAILED",
+          message: error.message || "Failed to issue single credential",
+        },
+      },
+      { status: isForbidden ? 403 : isNotFound ? 404 : 400 }
     );
   }
 }

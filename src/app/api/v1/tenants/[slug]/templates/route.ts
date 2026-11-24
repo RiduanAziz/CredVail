@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { TemplateService } from "@/lib/services/template-service";
 import { TemplateCategory } from "@/types/template";
+import { checkApiRateLimit, createRateLimitResponse } from "@/lib/services/api-rate-limiter";
 
 const templateService = new TemplateService();
 
@@ -14,8 +15,14 @@ export async function GET(
     const ctx = extractTenantContext(request, slug);
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category") as TemplateCategory | undefined;
+    const includeArchived = searchParams.get("includeArchived") === "true";
 
-    const templates = await templateService.listTemplates(slug, ctx.session, category || undefined);
+    const templates = await templateService.listTemplates(
+      slug,
+      ctx.session,
+      category || undefined,
+      includeArchived
+    );
 
     return NextResponse.json({
       success: true,
@@ -45,8 +52,19 @@ export async function POST(
   try {
     const { slug } = await params;
     const ctx = extractTenantContext(request, slug, "templates:create");
-    const body = await request.json();
 
+    // Rate limiting on template creation
+    const rateLimit = await checkApiRateLimit({
+      identifier: `${ctx.session.sub}:${slug}`,
+      scope: "templates:mutation",
+      maxAttempts: 30,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit.retryAfter || 60);
+    }
+
+    const body = await request.json();
     const template = await templateService.createTemplate(slug, body, ctx.session);
 
     return NextResponse.json(

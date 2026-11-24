@@ -23,40 +23,40 @@ export function HeroSection() {
   };
 
   return (
-    <section id="hero" className="relative overflow-hidden bg-transparent pb-16 pt-12 sm:pb-24 sm:pt-20 lg:pb-32 lg:pt-28">
-      {/* Editorial Canvas Subtle Grid */}
-      <div className="pointer-events-none absolute inset-0 opacity-[0.03] [background-image:linear-gradient(#0C0D12_1px,transparent_1px),linear-gradient(90deg,#0C0D12_1px,transparent_1px)] [background-size:48px_48px]" />
+    <section id="hero" className="relative overflow-hidden bg-transparent pb-16 pt-12 sm:pb-24 sm:pt-16 lg:pb-28 lg:pt-20">
+      {/* Subtle Archival Grid */}
+      <div className="pointer-events-none absolute inset-0 opacity-[0.025] [background-image:linear-gradient(#0F172A_1px,transparent_1px),linear-gradient(90deg,#0F172A_1px,transparent_1px)] [background-size:40px_40px]" />
 
       <div className="container relative mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-8">
+        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:gap-10">
           {/* Left Column: Editorial Typography & Actions */}
           <div className="relative z-10 flex flex-col items-start text-left">
-            {/* Pill Eyebrow */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/80 px-3.5 py-1 text-xs font-semibold uppercase tracking-wider text-brand-navy shadow-sm backdrop-blur">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            {/* Eyebrow Label */}
+            <div className="inline-flex items-center gap-2 rounded-md border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-[#475569]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0F1D38]" />
               <span>{hero.eyebrow}</span>
             </div>
 
-            {/* Oversized Contrasting Headline (Orbit-Style) */}
-            <h1 className="mt-6 text-4xl font-extrabold tracking-[-0.04em] text-[#0C0D12] sm:text-6xl lg:text-[4.75rem] lg:leading-[1.02]">
+            {/* Headline */}
+            <h1 className="mt-6 text-3xl font-semibold tracking-[-0.025em] text-[#0F172A] sm:text-5xl lg:text-[3.75rem] lg:leading-[1.08]">
               {hero.headlineLine1}
               <br />
-              <span className="text-black/35 font-bold">
+              <span className="text-[#64748B] font-normal">
                 {hero.headlineLine2}
               </span>
             </h1>
 
             {/* Compact Narrative Body */}
-            <p className="mt-6 max-w-xl text-base leading-relaxed text-[#4B5563] sm:text-lg">
+            <p className="mt-6 max-w-xl text-base leading-relaxed text-[#475569] sm:text-lg">
               {hero.description}
             </p>
 
-            {/* Dual Action Rectangular Pills */}
-            <div className="mt-8 flex flex-col w-full gap-3.5 sm:w-auto sm:flex-row sm:items-center">
+            {/* Dual Actions */}
+            <div className="mt-8 flex flex-col w-full gap-3 sm:w-auto sm:flex-row sm:items-center">
               <Link href={hero.primaryCta.href}>
                 <Button
                   size="lg"
-                  className="w-full sm:w-auto h-12 rounded-xl bg-[#0F1D38] px-7 text-sm font-semibold text-white shadow-md hover:bg-[#152445] transition-all hover:scale-[1.02]"
+                  className="w-full sm:w-auto h-11 rounded-lg bg-[#0F1D38] px-6 text-sm font-medium text-white shadow-none hover:bg-[#152445] transition-colors"
                 >
                   {hero.primaryCta.label}
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -66,7 +66,7 @@ export function HeroSection() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full sm:w-auto h-12 rounded-xl border-black/15 bg-white/70 px-7 text-sm font-semibold text-[#0F1D38] hover:bg-white transition-all hover:scale-[1.02] backdrop-blur"
+                  className="w-full sm:w-auto h-11 rounded-lg border-black/[0.12] bg-white px-6 text-sm font-medium text-[#0F1D38] hover:bg-slate-50 transition-colors shadow-none"
                 >
                   {hero.secondaryCta.label}
                 </Button>
@@ -76,9 +76,9 @@ export function HeroSection() {
             {/* Quick Verification Search Box */}
             <form
               onSubmit={handleQuickVerify}
-              className="mt-8 flex w-full max-w-lg items-center rounded-2xl border border-black/10 bg-white/90 p-1.5 shadow-sm backdrop-blur-sm transition-all focus-within:border-brand-cobalt focus-within:ring-2 focus-within:ring-brand-cobalt/20"
+              className="mt-6 flex w-full max-w-md items-center rounded-lg border border-black/[0.10] bg-white p-1 transition-colors focus-within:border-[#0F1D38]"
             >
-              <div className="flex h-10 w-10 items-center justify-center text-muted-foreground pl-1">
+              <div className="flex h-9 w-9 items-center justify-center text-slate-400 pl-1">
                 <Search className="h-4 w-4" />
               </div>
               <input
@@ -86,28 +86,28 @@ export function HeroSection() {
                 value={quickSearch}
                 onChange={(e) => setQuickSearch(e.target.value)}
                 placeholder={hero.verifyAction.placeholder}
-                className="w-full bg-transparent px-2 text-xs sm:text-sm text-[#0C0D12] placeholder:text-muted-foreground focus:outline-none"
+                className="w-full bg-transparent px-2 text-xs sm:text-sm text-[#0F172A] placeholder:text-slate-400 focus:outline-none"
               />
               <Button
                 type="submit"
                 size="sm"
-                className="h-9 shrink-0 rounded-xl bg-brand-cobalt px-4 text-xs font-semibold text-white hover:bg-blue-600 shadow-sm"
+                className="h-8 shrink-0 rounded-md bg-[#0F1D38] px-3.5 text-xs font-medium text-white hover:bg-[#152445] transition-colors shadow-none"
               >
                 Verify
               </Button>
             </form>
 
             {/* Metrics Ribbon */}
-            <div className="mt-10 grid w-full max-w-lg grid-cols-3 gap-4 border-t border-black/10 pt-6">
+            <div className="mt-8 grid w-full max-w-lg grid-cols-3 gap-6 border-t border-black/[0.08] pt-6">
               {hero.metrics.map((metric) => (
                 <div key={metric.label}>
-                  <p className="font-mono text-lg font-bold text-[#0F1D38] sm:text-xl">
+                  <p className="font-mono text-lg font-medium tabular-nums text-[#0F172A] sm:text-xl">
                     {metric.value}
                   </p>
-                  <p className="text-[11px] font-semibold text-muted-foreground">
+                  <p className="text-xs font-medium text-[#475569] mt-0.5">
                     {metric.label}
                   </p>
-                  <p className="text-[10px] text-black/40">
+                  <p className="text-[11px] text-[#64748B] mt-0.5">
                     {metric.detail}
                   </p>
                 </div>
@@ -115,8 +115,8 @@ export function HeroSection() {
             </div>
           </div>
 
-          {/* Right Column: Interactive 3D Credential (Reference 01 + Reference 03) */}
-          <div className="relative flex items-center justify-center w-full min-h-[440px] lg:min-h-[580px]">
+          {/* Right Column: 3D Credential Stage */}
+          <div className="relative flex items-center justify-center w-full min-h-[440px] lg:min-h-[560px]">
             <CredentialCore />
           </div>
         </div>

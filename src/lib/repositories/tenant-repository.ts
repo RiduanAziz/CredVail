@@ -1,6 +1,19 @@
+import crypto from "node:crypto";
 import { db } from "../db.ts";
 import type { TenantRole, VerificationStatus, TenantAnalyticsOverview, AuditLogEntry } from "../../types/index.ts";
 import { inMemoryUserStore } from "./user-repository.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
+
+export function normalizeIpHash(ipOrHash?: string): string {
+  if (!ipOrHash || ipOrHash.trim() === "") {
+    return "0000000000000000000000000000000000000000000000000000000000000000";
+  }
+  const trimmed = ipOrHash.trim();
+  if (/^[a-f0-9]{64}$/i.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+  return crypto.createHash("sha256").update(trimmed).digest("hex");
+}
 
 export interface TenantRecord {
   id: string;
@@ -23,6 +36,8 @@ export interface TenantMemberRecord {
   role: TenantRole;
   invitedBy: string | null;
   acceptedAt: Date | null;
+  invitationTokenHash?: string | null;
+  invitationExpiresAt?: Date | null;
   user: {
     id: string;
     email: string;
@@ -82,6 +97,7 @@ class InMemoryTenantStore {
     inMemoryUserStore.addMembership(data.ownerUserId, {
       tenantId: id,
       role: "ORG_OWNER",
+      acceptedAt: new Date(),
       tenant: { id, slug: record.slug, name: record.name, didUri: record.didUri },
     });
 
@@ -134,6 +150,9 @@ class InMemoryTenantStore {
     userId: string;
     role: TenantRole;
     invitedBy?: string;
+    acceptedAt?: Date | null;
+    invitationTokenHash?: string | null;
+    invitationExpiresAt?: Date | null;
     userEmail?: string;
     userFullName?: string;
   }): Promise<TenantMemberRecord> {
@@ -141,6 +160,9 @@ class InMemoryTenantStore {
     const existing = members.find((m) => m.userId === data.userId);
     if (existing) {
       existing.role = data.role;
+      if (data.acceptedAt !== undefined) existing.acceptedAt = data.acceptedAt;
+      if (data.invitationTokenHash !== undefined) existing.invitationTokenHash = data.invitationTokenHash;
+      if (data.invitationExpiresAt !== undefined) existing.invitationExpiresAt = data.invitationExpiresAt;
       return existing;
     }
 
@@ -148,13 +170,17 @@ class InMemoryTenantStore {
     const resolvedEmail = data.userEmail || userInStore?.email || "member@example.com";
     const resolvedFullName = data.userFullName || userInStore?.fullName || "Staff Member";
 
+    const acceptedAt = data.acceptedAt !== undefined ? data.acceptedAt : null;
+
     const newMember: TenantMemberRecord = {
       id: `mem_${crypto.randomUUID()}`,
       tenantId: data.tenantId,
       userId: data.userId,
       role: data.role,
       invitedBy: data.invitedBy || null,
-      acceptedAt: new Date(),
+      acceptedAt,
+      invitationTokenHash: data.invitationTokenHash || null,
+      invitationExpiresAt: data.invitationExpiresAt || null,
       user: {
         id: data.userId,
         email: resolvedEmail,
@@ -170,11 +196,49 @@ class InMemoryTenantStore {
       inMemoryUserStore.addMembership(data.userId, {
         tenantId: data.tenantId,
         role: data.role,
+        acceptedAt,
         tenant: { id: tenant.id, slug: tenant.slug, name: tenant.name, didUri: tenant.didUri },
       });
     }
 
     return newMember;
+  }
+
+  async acceptInvitation(
+    tokenHash: string,
+    acceptingUserId: string,
+    slug?: string
+  ): Promise<TenantMemberRecord> {
+    for (const [tenantId, members] of this.memberships.entries()) {
+      const member = members.find((m) => m.invitationTokenHash === tokenHash);
+      if (member) {
+        if (slug) {
+          const tenant = this.tenants.get(tenantId);
+          if (tenant && tenant.slug.toLowerCase() !== slug.toLowerCase()) {
+            throw new Error(`Invitation does not belong to organization '${slug}'`);
+          }
+        }
+        if (member.userId !== acceptingUserId) {
+          throw new Error("Invitation was issued to a different user");
+        }
+        if (member.acceptedAt !== null) {
+          throw new Error("Invitation has already been accepted (single-use token consumed)");
+        }
+        if (member.invitationExpiresAt && member.invitationExpiresAt.getTime() < Date.now()) {
+          throw new Error("Invitation token has expired");
+        }
+
+        const acceptedDate = new Date();
+        member.acceptedAt = acceptedDate;
+        member.invitationTokenHash = null; // single-use token consumed
+        member.invitationExpiresAt = null;
+
+        inMemoryUserStore.updateMembershipAccepted(acceptingUserId, tenantId, acceptedDate);
+
+        return member;
+      }
+    }
+    throw new Error("Invalid or expired invitation token");
   }
 
   async updateMemberRole(tenantId: string, userId: string, newRole: TenantRole): Promise<boolean> {
@@ -221,7 +285,7 @@ class InMemoryTenantStore {
       resourceType: data.resourceType,
       resourceId: data.resourceId,
       metadata: data.metadata || {},
-      ipHash: data.ipHash || "0000000000000000000000000000000000000000000000000000000000000000",
+      ipHash: normalizeIpHash(data.ipHash),
       userAgent: data.userAgent || null,
       createdAt: new Date().toISOString(),
     };
@@ -279,14 +343,16 @@ class InMemoryTenantStore {
 export const inMemoryTenantStore = new InMemoryTenantStore();
 
 export class TenantRepository {
-  private useMemory: boolean;
+  private forceMemory: boolean;
 
   constructor(forceMemory: boolean = false) {
-    this.useMemory =
-      forceMemory ||
-      (process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-        ? false
-        : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432"));
+    this.forceMemory = forceMemory;
+  }
+
+  private get useMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.forceMemory) return true;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
   }
 
   async createTenant(data: {
@@ -322,7 +388,8 @@ export class TenantRepository {
         },
       });
       return tenant as unknown as TenantRecord;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.createTenant", err);
       return inMemoryTenantStore.create(data);
     }
   }
@@ -348,7 +415,8 @@ export class TenantRepository {
         data: updateData,
       });
       return tenant as unknown as TenantRecord;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.updateTenant", err);
       return inMemoryTenantStore.updateTenant(id, data);
     }
   }
@@ -362,7 +430,8 @@ export class TenantRepository {
         where: { slug: slug.toLowerCase() },
       });
       return (tenant as unknown as TenantRecord) || null;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.findBySlug", err);
       return inMemoryTenantStore.findBySlug(slug);
     }
   }
@@ -374,7 +443,8 @@ export class TenantRepository {
     try {
       const tenant = await db.tenant.findUnique({ where: { id } });
       return (tenant as unknown as TenantRecord) || null;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.findById", err);
       return inMemoryTenantStore.findById(id);
     }
   }
@@ -397,7 +467,8 @@ export class TenantRepository {
         },
       });
       return members as unknown as TenantMemberRecord[];
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.listMembers", err);
       return inMemoryTenantStore.listMembers(tenantId);
     }
   }
@@ -407,6 +478,9 @@ export class TenantRepository {
     userId: string;
     role: TenantRole;
     invitedBy?: string;
+    acceptedAt?: Date | null;
+    invitationTokenHash?: string | null;
+    invitationExpiresAt?: Date | null;
     userEmail?: string;
     userFullName?: string;
   }): Promise<TenantMemberRecord> {
@@ -420,7 +494,7 @@ export class TenantRepository {
           userId: data.userId,
           role: data.role,
           invitedBy: data.invitedBy || null,
-          acceptedAt: new Date(),
+          acceptedAt: data.acceptedAt !== undefined ? data.acceptedAt : null,
         },
         include: {
           user: {
@@ -433,8 +507,25 @@ export class TenantRepository {
         },
       });
       return member as unknown as TenantMemberRecord;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.addMember", err);
       return inMemoryTenantStore.addMember(data);
+    }
+  }
+
+  async acceptInvitation(
+    tokenHash: string,
+    acceptingUserId: string,
+    slug?: string
+  ): Promise<TenantMemberRecord> {
+    if (this.useMemory) {
+      return inMemoryTenantStore.acceptInvitation(tokenHash, acceptingUserId, slug);
+    }
+    try {
+      return await inMemoryTenantStore.acceptInvitation(tokenHash, acceptingUserId, slug);
+    } catch (err) {
+      handleRepositoryError("TenantRepository.acceptInvitation", err);
+      return inMemoryTenantStore.acceptInvitation(tokenHash, acceptingUserId, slug);
     }
   }
 
@@ -450,7 +541,8 @@ export class TenantRepository {
         data: { role: newRole },
       });
       return true;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.updateMemberRole", err);
       return inMemoryTenantStore.updateMemberRole(tenantId, userId, newRole);
     }
   }
@@ -466,7 +558,8 @@ export class TenantRepository {
         },
       });
       return true;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.removeMember", err);
       return inMemoryTenantStore.removeMember(tenantId, userId);
     }
   }
@@ -479,7 +572,8 @@ export class TenantRepository {
       return await db.tenantMembership.count({
         where: { tenantId, role: "ORG_OWNER" },
       });
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.countOwners", err);
       return inMemoryTenantStore.countOwners(tenantId);
     }
   }
@@ -535,7 +629,8 @@ export class TenantRepository {
           timestamp: l.createdAt.toISOString(),
         })),
       };
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.getAnalytics", err);
       return inMemoryTenantStore.getAnalytics(tenantId);
     }
   }
@@ -563,7 +658,7 @@ export class TenantRepository {
           resourceType: data.resourceType,
           resourceId: data.resourceId,
           metadata: (data.metadata as any) || {},
-          ipHash: data.ipHash || "0000000000000000000000000000000000000000000000000000000000000000",
+          ipHash: normalizeIpHash(data.ipHash),
           userAgent: data.userAgent || null,
         },
       });
@@ -572,7 +667,8 @@ export class TenantRepository {
         metadata: log.metadata as Record<string, unknown>,
         createdAt: log.createdAt.toISOString(),
       };
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.recordAuditLog", err);
       return inMemoryTenantStore.recordAuditLog(data);
     }
   }
@@ -606,7 +702,8 @@ export class TenantRepository {
         userAgent: l.userAgent,
         createdAt: l.createdAt.toISOString(),
       }));
-    } catch {
+    } catch (err) {
+      handleRepositoryError("TenantRepository.listAuditLogs", err);
       return inMemoryTenantStore.listAuditLogs(tenantId, limit);
     }
   }

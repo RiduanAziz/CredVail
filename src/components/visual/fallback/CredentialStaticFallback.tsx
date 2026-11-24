@@ -1,98 +1,134 @@
 "use client";
 
-import { ShieldCheck, Check, Search } from "lucide-react";
-
 export function CredentialStaticFallback() {
   return (
     <div
       role="img"
-      aria-label="3D-styled physical digital verifiable credential artifact with circular plinth, shield, ribbon seal, and magnifying glass (Reference 01)"
-      className="relative mx-auto flex w-full max-w-[520px] flex-col items-center justify-center p-6 select-none"
+      aria-label="Static institutional verifiable credential artifact (Reference 01 presentation)"
+      className="relative mx-auto flex w-full max-w-[340px] flex-col items-center justify-center select-none"
     >
-      {/* Background Soft Studio Halo Glow */}
-      <div className="absolute inset-0 -z-10 flex items-center justify-center">
-        <div className="h-80 w-80 rounded-full bg-gradient-to-tr from-brand-cobalt/15 via-indigo-100/40 to-transparent blur-2xl" />
-      </div>
+      <div className="relative w-full rounded-xl border border-slate-300/90 bg-[#FAFBFD] p-3.5 shadow-xl ring-1 ring-indigo-500/15 sm:p-4">
+        {/* Outer Double Ornamental Frame */}
+        <div className="relative rounded-sm border-[1.5px] border-[#1B3A6B] p-1">
+          <div className="relative border border-[#1B3A6B]/55 px-4 pb-5 pt-4 text-center">
+            {/* Corner Arc Accents */}
+            <span className="pointer-events-none absolute -left-px -top-px h-3 w-3 rounded-br-full border-b border-r border-[#1B3A6B] bg-[#FAFBFD]" />
+            <span className="pointer-events-none absolute -right-px -top-px h-3 w-3 rounded-bl-full border-b border-l border-[#1B3A6B] bg-[#FAFBFD]" />
+            <span className="pointer-events-none absolute -bottom-px -left-px h-3 w-3 rounded-tr-full border-r border-t border-[#1B3A6B] bg-[#FAFBFD]" />
+            <span className="pointer-events-none absolute -bottom-px -right-px h-3 w-3 rounded-tl-full border-l border-t border-[#1B3A6B] bg-[#FAFBFD]" />
 
-      {/* Flanking Trust Elements (CSS-Rendered Metaphors for Reference 01) */}
-      <div className="relative flex w-full items-center justify-center">
-        {/* Left: Shield with Checkmark */}
-        <div className="absolute -left-3 bottom-12 z-20 hidden sm:flex h-20 w-16 flex-col items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-slate-100 to-slate-200 p-2 shadow-xl ring-1 ring-black/5 [transform:rotate(-8deg)]">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600/10 text-brand-cobalt">
-            <Check className="h-6 w-6 stroke-[3]" />
-          </div>
-          <span className="mt-1 font-mono text-[8px] font-bold uppercase tracking-wider text-slate-600">Trust</span>
-        </div>
+            {/* Illustrative Demonstration Label */}
+            <div className="inline-block rounded-full border border-indigo-200 bg-indigo-50/90 px-2.5 py-0.5 font-mono text-[8px] font-medium uppercase tracking-[0.16em] text-indigo-900">
+              Illustrative Demonstration
+            </div>
 
-        {/* Center: Main Reference 01 Certificate Plaque */}
-        <div className="relative z-10 w-full max-w-[340px] aspect-[1/1.36] rounded-2xl border-2 border-[#0F1D38]/20 bg-gradient-to-b from-[#FFFFFF] via-[#FAFBFD] to-[#F1F5F9] p-5 shadow-2xl ring-1 ring-black/5 [transform:perspective(1000px)_rotateX(4deg)]">
-          {/* Decorative Corner Insets & Inner Border */}
-          <div className="relative flex h-full w-full flex-col justify-between rounded-xl border border-[#0F1D38]/30 p-4">
-            {/* Header */}
-            <div className="text-center">
-              <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-[#0F1D38] font-black text-xs text-white shadow-sm">
-                C
+            <p className="mt-3 font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-[#1B3A6B]">
+              CREDVAIL Institutional Registry
+            </p>
+            <h3 className="mt-2 font-serif text-lg font-semibold leading-snug text-[#0B172A] sm:text-xl">
+              Certificate of Professional Distinction
+            </h3>
+
+            <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-slate-400">Awarded to</p>
+            <p className="mt-0.5 font-serif text-xl font-semibold text-[#0B172A]">Eleanor M. Vance</p>
+            <p className="font-mono text-[8.5px] text-slate-400">(Sample Recipient — Illustrative Entry)</p>
+
+            <p className="mx-auto mt-2.5 max-w-[230px] text-[10px] leading-relaxed text-slate-600">
+              For demonstrating mastery in Digital Trust Architecture &amp; Cryptographic Governance.
+            </p>
+
+            {/* Subtle Guilloché Wave SVG */}
+            <svg
+              className="pointer-events-none mx-auto mt-3 h-8 w-full opacity-25"
+              viewBox="0 0 260 36"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M0 18 Q 65 2, 130 18 T 260 18" stroke="#1B3A6B" strokeWidth="0.7" />
+              <path d="M0 22 Q 65 6, 130 22 T 260 22" stroke="#1B3A6B" strokeWidth="0.6" />
+              <path d="M0 26 Q 65 10, 130 26 T 260 26" stroke="#4F46E5" strokeWidth="0.5" />
+            </svg>
+
+            {/* Lower Metadata + QR + Embossed Rosette Seal */}
+            <div className="mt-2 flex items-end justify-between gap-2 text-left">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  {/* Illustrative Mini QR */}
+                  <div
+                    className="flex h-10 w-10 flex-col items-center justify-center rounded border border-slate-300 bg-white p-1"
+                    aria-label="Illustrative QR representation"
+                  >
+                    <svg
+                      className="h-full w-full text-[#0B172A]"
+                      viewBox="0 0 21 21"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <rect x="0" y="0" width="6" height="6" />
+                      <rect x="1" y="1" width="4" height="4" fill="#fff" />
+                      <rect x="2" y="2" width="2" height="2" />
+                      <rect x="15" y="0" width="6" height="6" />
+                      <rect x="16" y="1" width="4" height="4" fill="#fff" />
+                      <rect x="17" y="2" width="2" height="2" />
+                      <rect x="0" y="15" width="6" height="6" />
+                      <rect x="1" y="16" width="4" height="4" fill="#fff" />
+                      <rect x="2" y="17" width="2" height="2" />
+                      <rect x="8" y="2" width="2" height="2" />
+                      <rect x="11" y="4" width="2" height="3" />
+                      <rect x="8" y="8" width="5" height="2" />
+                      <rect x="9" y="11" width="2" height="4" />
+                      <rect x="13" y="12" width="3" height="3" />
+                      <rect x="17" y="16" width="3" height="3" />
+                    </svg>
+                  </div>
+                  <div className="font-mono text-[7.5px] leading-tight text-slate-500">
+                    <div className="font-semibold text-[#0B172A]">CV-DEMO-2026-08491</div>
+                    <div>Issued: Nov 2026</div>
+                    <div className="text-[7px] uppercase tracking-wider text-slate-400">Scan Demo</div>
+                  </div>
+                </div>
               </div>
-              <p className="mt-2 font-mono text-[9px] font-extrabold uppercase tracking-[0.2em] text-[#0F1D38]">
-                CREDVAIL NETWORK
-              </p>
-              <p className="text-[7px] font-semibold uppercase tracking-wider text-blue-600">
-                W3C Verifiable Credential 2.0
-              </p>
-            </div>
 
-            {/* Title & Recipient */}
-            <div className="my-2 text-center space-y-1">
-              <p className="font-mono text-[8px] font-bold uppercase tracking-widest text-[#64748B]">
-                Accreditation Standard
-              </p>
-              <h4 className="text-xs font-black text-[#0F1D38] sm:text-sm">
-                CERTIFICATE OF ACCREDITATION
-              </h4>
-              <p className="text-[9px] italic text-[#475569]">Conferred unto Verified Institution</p>
-            </div>
-
-            {/* Claims Mini-table */}
-            <div className="rounded-lg bg-black/[0.02] p-2 text-[8px] font-mono text-slate-600 space-y-0.5 border border-black/5">
-              <p>URN: urn:credvail:vc:institution:2026</p>
-              <p>STATUS: CRYPTOGRAPHICALLY SECURED</p>
-            </div>
-
-            {/* Bottom Footer & Pinned Ribbon Seal */}
-            <div className="flex items-end justify-between pt-2 border-t border-black/5">
-              <div className="space-y-0.5 text-[8px] font-mono text-slate-500">
-                <p>DID: did:web:credvail.org</p>
-                <p>ROOT: 0x89e2...6701</p>
-              </div>
-
-              {/* Ribbon Seal Medallion (Lower Right) */}
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-full border-2 border-amber-400 bg-gradient-to-tr from-blue-900 via-blue-700 to-indigo-800 shadow-md">
-                <ShieldCheck className="h-5 w-5 text-amber-300 drop-shadow-sm" />
-                {/* Ribbon tails hanging down */}
-                <div className="absolute -bottom-2 -left-0.5 h-3 w-1.5 rounded-sm bg-blue-900 [transform:rotate(18deg)]" />
-                <div className="absolute -bottom-2 -right-0.5 h-3 w-1.5 rounded-sm bg-blue-900 [transform:rotate(-18deg)]" />
-              </div>
+              {/* Embossed Navy Rosette SVG Seal */}
+              <svg
+                className="h-16 w-14 shrink-0 drop-shadow-sm"
+                viewBox="0 0 64 76"
+                fill="none"
+                aria-label="Embossed institutional seal"
+              >
+                <path d="M22 44 L15 72 L24 66 L30 73 L33 46 Z" fill="#15315C" />
+                <path d="M42 44 L49 72 L40 66 L34 73 L31 46 Z" fill="#1E437D" />
+                <circle
+                  cx="32"
+                  cy="28"
+                  r="20"
+                  fill="#1B3B6F"
+                  stroke="#10284D"
+                  strokeWidth="2"
+                  strokeDasharray="3.5 2.5"
+                />
+                <circle
+                  cx="32"
+                  cy="28"
+                  r="15.5"
+                  fill="#214682"
+                  stroke="#93C5FD"
+                  strokeOpacity="0.35"
+                  strokeWidth="1"
+                />
+                <circle cx="32" cy="28" r="11.5" fill="#183564" />
+                <path
+                  d="M27.5 28.2 L30.6 31.2 L36.8 25"
+                  stroke="#DBEAFE"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
           </div>
         </div>
-
-        {/* Right: Magnifying Glass */}
-        <div className="absolute -right-3 bottom-12 z-20 hidden sm:flex h-20 w-16 flex-col items-center justify-center rounded-2xl border border-white/60 bg-gradient-to-br from-slate-100 to-slate-200 p-2 shadow-xl ring-1 ring-black/5 [transform:rotate(8deg)]">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600/10 text-brand-cobalt">
-            <Search className="h-6 w-6 stroke-[2.5]" />
-          </div>
-          <span className="mt-1 font-mono text-[8px] font-bold uppercase tracking-wider text-slate-600">Verify</span>
-        </div>
       </div>
-
-      {/* Studio Plinth Base Underneath */}
-      <div className="relative -mt-3 h-5 w-72 rounded-full border border-black/10 bg-gradient-to-r from-slate-200 via-white to-slate-200 shadow-md">
-        <div className="absolute inset-x-2 bottom-0.5 h-0.5 rounded-full bg-slate-400/40" />
-      </div>
-
-      <p className="mt-4 text-center font-mono text-[10px] uppercase tracking-widest text-[#64748B]">
-        Authenticated Institutional Digital Document
-      </p>
     </div>
   );
 }

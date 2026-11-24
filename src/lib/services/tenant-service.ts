@@ -1,8 +1,10 @@
+import crypto from "node:crypto";
 import { z } from "zod";
 import { TenantRepository, TenantRecord, TenantMemberRecord } from "@/lib/repositories/tenant-repository";
 import { UserRepository } from "@/lib/repositories/user-repository";
 import { assertTenantPermission } from "@/lib/auth/rbac";
 import { SessionPayload } from "@/lib/auth/session";
+import { AuthorizationError } from "@/lib/auth/tenant-context";
 import { TenantRole, TenantAnalyticsOverview, AuditLogEntry } from "@/types";
 
 export const createTenantSchema = z.object({
@@ -136,7 +138,7 @@ export class TenantService {
     slug: string,
     input: z.infer<typeof inviteMemberSchema>,
     session: SessionPayload
-  ): Promise<TenantMemberRecord> {
+  ): Promise<TenantMemberRecord & { invitationToken?: string; invitationExpiresAt?: Date }> {
     const validated = inviteMemberSchema.parse(input);
     const tenant = await this.tenantRepo.findBySlug(slug);
     if (!tenant) throw new Error(`Tenant '${slug}' not found`);
@@ -144,6 +146,13 @@ export class TenantService {
     const membership = session.tenants.find((t) => t.slug === slug || t.tenantId === tenant.id);
     if (session.platformRole !== "SUPER_ADMIN") {
       assertTenantPermission(membership?.role, "members:invite");
+    }
+
+    // Privilege escalation protection: only ORG_OWNER or SUPER_ADMIN can invite an ORG_OWNER
+    if (validated.role === "ORG_OWNER") {
+      if (membership?.role !== "ORG_OWNER" && session.platformRole !== "SUPER_ADMIN") {
+        throw new AuthorizationError("Only Organization Owners or Platform Administrators can invite an Organization Owner");
+      }
     }
 
     // Find or create user record for invited staff
@@ -157,15 +166,31 @@ export class TenantService {
       });
     }
 
+    // Verify user is not already an active member of this organization
+    const existingMembers = await this.tenantRepo.listMembers(tenant.id);
+    const existing = existingMembers.find((m) => m.userId === user.id);
+    if (existing && existing.acceptedAt !== null) {
+      throw new Error(`User '${validated.email}' is already an active member of this organization`);
+    }
+
+    // Generate high-entropy 256-bit CSPRNG token (64 hex characters)
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day TTL
+
     const member = await this.tenantRepo.addMember({
       tenantId: tenant.id,
       userId: user.id,
       role: validated.role,
       invitedBy: session.sub,
+      acceptedAt: null,
+      invitationTokenHash: tokenHash,
+      invitationExpiresAt: expiresAt,
       userEmail: user.email,
       userFullName: user.fullName,
     });
 
+    // Record audit log - NEVER expose rawToken in metadata or logs
     await this.tenantRepo.recordAuditLog({
       tenantId: tenant.id,
       userId: session.sub,
@@ -173,7 +198,47 @@ export class TenantService {
       action: "MEMBER_INVITED",
       resourceType: "TenantMembership",
       resourceId: member.id,
-      metadata: { targetUserId: user.id, email: validated.email, role: validated.role },
+      metadata: {
+        targetUserId: user.id,
+        email: validated.email,
+        role: validated.role,
+        invitationExpiresAt: expiresAt.toISOString(),
+        invitationTokenHash: tokenHash,
+      },
+    });
+
+    return {
+      ...member,
+      invitationToken: rawToken,
+      invitationExpiresAt: expiresAt,
+    };
+  }
+
+  /**
+   * Atomically accepts an organization staff invitation using the single-use token.
+   */
+  async acceptInvitation(
+    slug: string,
+    rawToken: string,
+    acceptingUserId: string
+  ): Promise<TenantMemberRecord> {
+    if (!rawToken || typeof rawToken !== "string" || !rawToken.trim()) {
+      throw new Error("Invalid invitation token provided");
+    }
+    const tokenHash = crypto.createHash("sha256").update(rawToken.trim()).digest("hex");
+    const member = await this.tenantRepo.acceptInvitation(tokenHash, acceptingUserId, slug);
+
+    await this.tenantRepo.recordAuditLog({
+      tenantId: member.tenantId,
+      userId: acceptingUserId,
+      userEmail: member.user.email,
+      action: "MEMBER_INVITATION_ACCEPTED",
+      resourceType: "TenantMembership",
+      resourceId: member.id,
+      metadata: {
+        role: member.role,
+        acceptedAt: member.acceptedAt?.toISOString(),
+      },
     });
 
     return member;
@@ -196,18 +261,33 @@ export class TenantService {
       assertTenantPermission(callerMembership?.role, "members:update_role");
     }
 
-    // If demoting an existing ORG_OWNER, guarantee at least one other ORG_OWNER exists
     const members = await this.tenantRepo.listMembers(tenant.id);
     const targetMember = members.find((m) => m.userId === targetUserId);
     if (!targetMember) {
       throw new Error("Target user is not a member of this organization");
     }
 
+    // 1. If demoting an existing ORG_OWNER, guarantee at least one other ORG_OWNER exists
     if (targetMember.role === "ORG_OWNER" && newRole !== "ORG_OWNER") {
       const ownerCount = await this.tenantRepo.countOwners(tenant.id);
       if (ownerCount <= 1) {
         throw new Error("Cannot demote the sole Organization Owner. Transfer ownership first.");
       }
+    }
+
+    // 2. Prevent self-role modification: callers cannot elevate or demote their own institutional role
+    if (session.sub === targetUserId && session.platformRole !== "SUPER_ADMIN") {
+      throw new AuthorizationError("Users are forbidden from modifying their own institutional roles");
+    }
+
+    // 3. Privilege escalation prevention: only ORG_OWNER or SUPER_ADMIN can promote to ORG_OWNER
+    if (newRole === "ORG_OWNER" && callerMembership?.role !== "ORG_OWNER" && session.platformRole !== "SUPER_ADMIN") {
+      throw new AuthorizationError("Only Organization Owners or Platform Administrators can assign the Organization Owner role");
+    }
+
+    // 4. Protection of existing ORG_OWNERs: INSTITUTION_ADMIN cannot modify an ORG_OWNER's role
+    if (targetMember.role === "ORG_OWNER" && callerMembership?.role !== "ORG_OWNER" && session.platformRole !== "SUPER_ADMIN") {
+      throw new AuthorizationError("Only Organization Owners or Platform Administrators can modify an Organization Owner");
     }
 
     const success = await this.tenantRepo.updateMemberRole(tenant.id, targetUserId, newRole);
@@ -249,11 +329,17 @@ export class TenantService {
       throw new Error("Target user is not a member of this organization");
     }
 
+    // 1. If removing an ORG_OWNER, guarantee at least one other ORG_OWNER exists
     if (targetMember.role === "ORG_OWNER") {
       const ownerCount = await this.tenantRepo.countOwners(tenant.id);
       if (ownerCount <= 1) {
         throw new Error("Cannot remove the sole Organization Owner");
       }
+    }
+
+    // 2. Protection of existing ORG_OWNERs: an INSTITUTION_ADMIN cannot remove an ORG_OWNER
+    if (targetMember.role === "ORG_OWNER" && callerMembership?.role !== "ORG_OWNER" && session.platformRole !== "SUPER_ADMIN") {
+      throw new AuthorizationError("Only Organization Owners or Platform Administrators can remove an Organization Owner");
     }
 
     const success = await this.tenantRepo.removeMember(tenant.id, targetUserId);

@@ -1,11 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AuthService, registerInputSchema } from "@/lib/services/auth-service";
 import { getSessionCookieHeader } from "@/lib/auth/session";
+import {
+  getClientIp,
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
 
 const authService = new AuthService();
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: ip,
+      ...RATE_LIMIT_PROFILES.AUTH_REGISTER,
+    });
+
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "registration");
+    }
+
     const body = await request.json();
     const result = await authService.register(body);
 

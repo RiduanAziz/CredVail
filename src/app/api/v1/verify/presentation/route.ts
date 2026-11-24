@@ -1,12 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VerificationService } from "@/lib/services/verification-service";
+import {
+  getClientIp,
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
+import { verifyPresentationSchema } from "@/lib/validation/api-validators";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { credential, presentation, nonce } = body || {};
+    const ip = getClientIp(request);
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: ip,
+      ...RATE_LIMIT_PROFILES.VERIFY_PRESENTATION,
+    });
 
-    if (!credential && !presentation) {
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "presentation verification");
+    }
+
+    const rawBody = await request.json().catch(() => ({}));
+    const parseResult = verifyPresentationSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json(
+        {
+          error: "BAD_REQUEST",
+          message: parseResult.error.errors[0]?.message || "Request body must contain either a 'credential' or 'presentation' JSON object.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { credential, presentation, nonce } = parseResult.data;
+
+    let result;
+    if (presentation) {
+      result = await VerificationService.verifyPresentation(presentation, nonce);
+    } else if (credential) {
+      result = await VerificationService.verifyRawCredential(credential);
+    } else {
       return NextResponse.json(
         {
           error: "BAD_REQUEST",
@@ -14,13 +48,6 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
-    }
-
-    let result;
-    if (presentation) {
-      result = await VerificationService.verifyPresentation(presentation, nonce);
-    } else {
-      result = await VerificationService.verifyRawCredential(credential);
     }
 
     return NextResponse.json(

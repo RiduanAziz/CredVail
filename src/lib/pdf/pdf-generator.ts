@@ -49,13 +49,40 @@ export function hexToRgb(hex?: string): RGB {
 
 /**
  * Replaces placeholders in text with actual claim values.
+ * Supports both modern dot-notation ({{recipient.name}}) and legacy snake_case ({{recipient_name}}).
  */
 export function replacePlaceholders(text: string, claims: Record<string, string>): string {
   if (!text) return "";
   let resolved = text;
-  for (const [key, val] of Object.entries(claims)) {
-    // Match either {{key}} or just key
-    const pattern = key.startsWith("{{") ? key : `{{${key}}}`;
+
+  // Build unified normalized lookup dictionary
+  const normalized: Record<string, string> = {};
+  for (const [k, v] of Object.entries(claims)) {
+    const rawKey = k.replace(/^\{\{|\}\}$/g, "").trim();
+    normalized[rawKey] = v || "";
+  }
+
+  const aliases: [string, string][] = [
+    ["recipient.name", "recipient_name"],
+    ["recipient.email", "recipient_email"],
+    ["credential.title", "course_name"],
+    ["credential.description", "description"],
+    ["credential.certificateNumber", "certificate_number"],
+    ["issuer.name", "organization_name"],
+    ["credential.issueDate", "issue_date"],
+    ["credential.expiryDate", "expiry_date"],
+    ["completion.date", "completion_date"],
+    ["instructor.name", "instructor_name"],
+    ["credential.verificationUrl", "verification_url"],
+  ];
+
+  for (const [dot, snake] of aliases) {
+    if (normalized[dot] && !normalized[snake]) normalized[snake] = normalized[dot];
+    if (normalized[snake] && !normalized[dot]) normalized[dot] = normalized[snake];
+  }
+
+  for (const [key, val] of Object.entries(normalized)) {
+    const pattern = `{{${key}}}`;
     const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     resolved = resolved.replace(new RegExp(escaped, "g"), val || "");
   }

@@ -8,7 +8,7 @@
     "build": "node node_modules/next/dist/bin/next build",
     "start": "node node_modules/next/dist/bin/next start",
     "lint": "node node_modules/next/dist/bin/next lint",
-    "test": "node --test scripts/test-crypto-and-system.mjs scripts/verify-phase-0.mjs scripts/verify-phase-1.mjs scripts/verify-phase-2.mjs scripts/verify-phase-3.mjs scripts/verify-phase-4.mjs scripts/verify-phase-5.mjs scripts/verify-phase-6.mjs scripts/verify-phase-7.mjs scripts/verify-phase-8.mjs scripts/verify-phase-9.mjs scripts/verify-phase-10.mjs scripts/verify-phase-11.mjs scripts/verify-phase-12.mjs scripts/verify-phase-13.mjs",
+    "test": "node --test scripts/test-crypto-and-system.mjs scripts/verify-phase-0.mjs scripts/verify-phase-1.mjs scripts/verify-phase-2.mjs scripts/verify-phase-3.mjs scripts/verify-phase-4.mjs scripts/verify-phase-5.mjs scripts/verify-phase-6.mjs scripts/verify-phase-7.mjs scripts/verify-phase-8.mjs scripts/verify-phase-9.mjs scripts/verify-phase-10.mjs scripts/verify-phase-11.mjs scripts/verify-phase-12.mjs scripts/verify-phase-13.mjs scripts/verify-vfx-02-interactive-credential.mjs",
     "test:vitest": "node node_modules/vitest/vitest.mjs run",
     "test:watch": "node node_modules/vitest/vitest.mjs",
     "test:coverage": "node node_modules/vitest/vitest.mjs run --coverage",

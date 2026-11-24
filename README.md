@@ -58,6 +58,7 @@ CREDVAIL addresses the critical trilemma in academic and vocational credentialin
 ## 4. Architectural Documentation
 
 Complete Phase 0 architectural specifications:
+- [Master Implementation Plan & Roadmap](docs/MASTER_ROADMAP.md)
 - [Phase 0 Master Specification](docs/architecture/PHASE_0_SPECIFICATION.md)
 - [Database Schema & ER Architecture](docs/architecture/DATABASE_SCHEMA.md)
 - [REST API Contract & Endpoints](docs/architecture/API_SPECIFICATION.md)
@@ -69,21 +70,25 @@ Complete Phase 0 architectural specifications:
 
 ## 5. Development Phases
 
-- [x] **PHASE 0:** Requirements Audit and Technical Planning
-- [ ] **PHASE 1:** Project Setup and Architecture
-- [ ] **PHASE 2:** Authentication and Multi-Tenant Foundation
-- [ ] **PHASE 3:** Organization Dashboard and User Management
-- [ ] **PHASE 4:** Certificate Template Designer
-- [ ] **PHASE 5:** CSV/XLSX Import and Validation
-- [ ] **PHASE 6:** Automated PDF and QR Certificate Generation
-- [ ] **PHASE 7:** Issuer Identity and Cryptographic Key Management
-- [ ] **PHASE 8:** Verifiable Credential Issuance and Merkle Anchoring
-- [ ] **PHASE 9:** Ethereum Smart Contracts and Testnet Integration
-- [ ] **PHASE 10:** Public Verification Engine
-- [ ] **PHASE 11:** Holder Wallet and Selective Disclosure
-- [ ] **PHASE 12:** Revocation, Key Rotation and Freshness-Aware Verification
-- [ ] **PHASE 13:** Security Testing and Performance Evaluation
-- [ ] **PHASE 14:** Deployment, Documentation and Thesis Deliverables
+The engineering lifecycle follows the 16-phase security-first roadmap defined in [docs/MASTER_ROADMAP.md](docs/MASTER_ROADMAP.md):
+
+- [x] **PHASE 0:** Project Baseline and Engineering Governance
+- [x] **PHASE 1:** Engineering Infrastructure and CI Quality Gates
+- [ ] **PHASE 2:** Production Security and Persistence Hardening (In Progress / Remediation)
+- [ ] **PHASE 3:** Authentication, Organizations and Multi-Tenant RBAC
+- [ ] **PHASE 4:** Issuer Identity and Cryptographic Key Management
+- [ ] **PHASE 5:** Certificate Template Designer
+- [ ] **PHASE 6:** Recipient Management and Spreadsheet Import
+- [ ] **PHASE 7:** Credential Issuance and Document Generation
+- [ ] **PHASE 8:** Claim Invitations and Single-Owner Credential Authorization (H1.3.3.1)
+- [ ] **PHASE 9:** Holder Wallet and Holder Identity
+- [ ] **PHASE 10:** Public Credential Verification
+- [ ] **PHASE 11:** Revocation, Status Lists and Credential Lifecycle
+- [ ] **PHASE 12:** Blockchain Anchoring and Smart Contract Reliability
+- [ ] **PHASE 13:** Audit Logs, Analytics and Reporting
+- [ ] **PHASE 14:** Privacy-Preserving Presentations and Interoperability
+- [ ] **PHASE 15:** SaaS Commercialization and Platform Administration
+- [ ] **PHASE 16:** Production Deployment and Operational Readiness
 
 ---
 

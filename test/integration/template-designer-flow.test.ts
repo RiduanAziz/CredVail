@@ -60,7 +60,7 @@ describe("Phase 4 End-to-End Certificate Template Designer Flow", () => {
       fullName: "Bob Canvas",
     });
 
-    await tenantService.inviteMember(
+    const bobInvite = await tenantService.inviteMember(
       "imperial",
       {
         email: "bob@imperial.ac.uk",
@@ -68,6 +68,13 @@ describe("Phase 4 End-to-End Certificate Template Designer Flow", () => {
         role: "TEMPLATE_DESIGNER",
       },
       elenaSession
+    );
+
+    // Bob accepts the invitation before logging in
+    await tenantService.acceptInvitation(
+      "imperial",
+      bobInvite.invitationToken!,
+      bobReg.user.id
     );
 
     // 3. Bob logs in with imperial tenant session

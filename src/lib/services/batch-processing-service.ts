@@ -204,8 +204,8 @@ export class BatchProcessingService {
       throw new Error(`Batch "${batch.batchNumber}" has already been processed (status: ${batch.status}).`);
     }
 
-    // 2. Fetch associated certificate template
-    const rawTemplate = await this.templateRepo.getTemplateById(tenant.id, batch.templateId);
+    // 2. Fetch associated certificate template (prefer immutable snapshot captured at staging)
+    const rawTemplate = batch.templateSnapshot || (await this.templateRepo.getTemplateById(tenant.id, batch.templateId));
     if (!rawTemplate) {
       throw new Error(`Certificate template with ID "${batch.templateId}" not found.`);
     }

@@ -52,13 +52,18 @@ export function createSessionToken(
     memberships?: Array<{
       tenantId: string;
       role: TenantRole;
+      acceptedAt?: Date | null;
       tenant: { slug: string; name: string };
     }>;
   },
   activeTenantId?: string
 ): string {
   const now = Math.floor(Date.now() / 1000);
-  const tenants: SessionTenantInfo[] = (user.memberships || []).map((m) => ({
+  // Strictly filter out unaccepted pending member invitations (acceptedAt === null)
+  const acceptedMemberships = (user.memberships || []).filter(
+    (m) => m.acceptedAt !== null
+  );
+  const tenants: SessionTenantInfo[] = acceptedMemberships.map((m) => ({
     tenantId: m.tenantId,
     slug: m.tenant.slug,
     name: m.tenant.name,

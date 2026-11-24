@@ -7,6 +7,7 @@
  */
 
 import { prisma } from "../db.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export interface StoredStatusSnapshot {
   id: string;
@@ -36,16 +37,28 @@ export interface CreateSnapshotInput {
 
 export class StatusSnapshotRepository {
   private static inMemorySnapshots = new Map<string, StoredStatusSnapshot>();
-  private static useMemory =
-    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-      ? false
-      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static manualMemoryOverride: boolean | null = null;
+
+  public static setUseMemory(val: boolean): void {
+    this.manualMemoryOverride = val;
+  }
+
+  public static getUseMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.manualMemoryOverride !== null) return this.manualMemoryOverride;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  }
+
+  private static get useMemory(): boolean {
+    return this.getUseMemory();
+  }
 
   /**
    * Resets the in-memory snapshot store for hermetic test suites.
    */
   public static resetInMemoryStore(): void {
     this.inMemorySnapshots.clear();
+    this.manualMemoryOverride = null;
   }
 
   /**
@@ -109,8 +122,8 @@ export class StatusSnapshotRepository {
         const storeKey = `${input.tenantId}:${input.epoch}`;
         this.inMemorySnapshots.set(storeKey, resRecord);
         return resRecord;
-      } catch {
-        // Fall back to in-memory store
+      } catch (err) {
+        handleRepositoryError("StatusSnapshotRepository.createSnapshot", err);
       }
     }
 
@@ -151,8 +164,8 @@ export class StatusSnapshotRepository {
           this.inMemorySnapshots.set(storeKey, record);
           return record;
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("StatusSnapshotRepository.getSnapshotByEpoch", err);
       }
     }
 
@@ -190,8 +203,8 @@ export class StatusSnapshotRepository {
             createdAt: dbSnapshot.createdAt,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("StatusSnapshotRepository.getLatestSnapshot", err);
       }
     }
 
@@ -229,8 +242,8 @@ export class StatusSnapshotRepository {
             });
           }
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("StatusSnapshotRepository.listSnapshots", err);
       }
     }
 
@@ -263,8 +276,8 @@ export class StatusSnapshotRepository {
             anchoredAt,
           },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("StatusSnapshotRepository.updateSnapshotAnchor", err);
       }
     }
 

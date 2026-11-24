@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VerificationService } from "@/lib/services/verification-service";
+import {
+  getClientIp,
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
+import { audienceOriginSchema } from "@/lib/validation/api-validators";
 
 /**
  * Creates a one-use challenge bound to the verifier origin.
@@ -7,34 +14,28 @@ import { VerificationService } from "@/lib/services/verification-service";
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json().catch(() => ({}));
-    const audience = typeof body?.audience === "string" ? body.audience : "";
+    const ip = getClientIp(request);
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: ip,
+      ...RATE_LIMIT_PROFILES.VERIFY_CHALLENGE,
+    });
 
-    let parsedAudience: URL;
-    try {
-      parsedAudience = new URL(audience);
-    } catch {
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "challenge creation");
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const audienceInput = typeof body?.audience === "string" ? body.audience : "";
+
+    const validationResult = audienceOriginSchema.safeParse(audienceInput);
+    if (!validationResult.success) {
       return NextResponse.json(
         { error: "BAD_REQUEST", message: "A valid verifier audience origin is required." },
         { status: 400 }
       );
     }
 
-    const isLocalDevelopment =
-      parsedAudience.protocol === "http:" &&
-      ["localhost", "127.0.0.1"].includes(parsedAudience.hostname);
-    if (
-      (parsedAudience.protocol !== "https:" && !isLocalDevelopment) ||
-      parsedAudience.origin !== audience ||
-      parsedAudience.username ||
-      parsedAudience.password
-    ) {
-      return NextResponse.json(
-        { error: "BAD_REQUEST", message: "Audience must be an HTTPS origin (HTTP is allowed only for localhost development)." },
-        { status: 400 }
-      );
-    }
-
+    const parsedAudience = new URL(validationResult.data);
     const challenge = await VerificationService.createChallengeNonce(300, parsedAudience.origin);
 
     return NextResponse.json(

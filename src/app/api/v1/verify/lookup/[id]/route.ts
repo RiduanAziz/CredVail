@@ -1,40 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { VerificationService } from "@/lib/services/verification-service";
-
-/**
- * In-memory sliding-window rate limiter for public verification lookups.
- * Limits each client IP to 60 lookups per 60-second window to prevent mass enumeration.
- */
-interface RateLimitRecord {
-  count: number;
-  resetAt: number;
-}
-
-const rateLimitMap = new Map<string, RateLimitRecord>();
-const RATE_LIMIT_MAX = 60;
-const RATE_LIMIT_WINDOW_MS = 60 * 1000;
-
-function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-
-  if (!record || now > record.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return { allowed: true };
-  }
-
-  if (record.count >= RATE_LIMIT_MAX) {
-    const retryAfter = Math.ceil((record.resetAt - now) / 1000);
-    return { allowed: false, retryAfter };
-  }
-
-  record.count++;
-  return { allowed: true };
-}
-
-function resetPublicLookupRateLimiter(): void {
-  rateLimitMap.clear();
-}
+import {
+  getClientIp,
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
+import { credentialIdSchema, validateParam } from "@/lib/validation/api-validators";
 
 /**
  * GET /api/v1/verify/lookup/[id]
@@ -48,38 +20,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 1. IP Rate Limiting
-    const ip =
-      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      request.headers.get("x-real-ip") ||
-      "127.0.0.1";
+    // 1. IP Rate Limiting (60 requests / 60 seconds)
+    const ip = getClientIp(request);
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: ip,
+      ...RATE_LIMIT_PROFILES.VERIFY_LOOKUP,
+    });
 
-    const { allowed, retryAfter } = checkRateLimit(ip);
     if (!allowed) {
-      return NextResponse.json(
-        {
-          error: "TOO_MANY_REQUESTS",
-          message: "Public verification rate limit exceeded. Please try again later.",
-        },
-        {
-          status: 429,
-          headers: {
-            "Retry-After": String(retryAfter || 60),
-          },
-        }
-      );
+      return createRateLimitResponse(retryAfter, "public verification lookup");
     }
 
-    const { id } = await params;
-    if (!id || id.trim().length === 0) {
+    const { id: rawId } = await params;
+    if (!rawId || rawId.trim().length === 0) {
       return NextResponse.json(
         { error: "BAD_REQUEST", message: "A credential public identifier is required." },
         { status: 400 }
       );
     }
 
+    const id = validateParam(rawId.trim(), credentialIdSchema);
+
     // 2. Execute public verification with privacy filtering
-    const publicResult = await VerificationService.verifyPublicSafe(id.trim());
+    const publicResult = await VerificationService.verifyPublicSafe(id);
 
     return NextResponse.json(
       {

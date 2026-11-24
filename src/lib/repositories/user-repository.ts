@@ -1,5 +1,6 @@
 import { db } from "../db.ts";
 import type { PlatformRole, TenantRole } from "../../types/index.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export interface UserRecord {
   id: string;
@@ -16,6 +17,7 @@ export interface UserWithMemberships extends UserRecord {
   memberships: Array<{
     tenantId: string;
     role: TenantRole;
+    acceptedAt?: Date | null;
     tenant: {
       id: string;
       slug: string;
@@ -30,7 +32,7 @@ export interface UserWithMemberships extends UserRecord {
  */
 class InMemoryUserStore {
   private users: Map<string, UserRecord> = new Map();
-  private memberships: Map<string, Array<{ tenantId: string; role: TenantRole; tenant: any }>> = new Map();
+  private memberships: Map<string, Array<{ tenantId: string; role: TenantRole; acceptedAt?: Date | null; tenant: any }>> = new Map();
 
   async create(data: { email: string; passwordHash: string; fullName: string; platformRole?: PlatformRole }): Promise<UserRecord> {
     const id = `usr_${crypto.randomUUID()}`;
@@ -68,15 +70,28 @@ class InMemoryUserStore {
     };
   }
 
-  addMembership(userId: string, membership: { tenantId: string; role: TenantRole; tenant: any }) {
+  addMembership(userId: string, membership: { tenantId: string; role: TenantRole; tenant: any; acceptedAt?: Date | null }) {
     const list = this.memberships.get(userId) || [];
     const existing = list.find((m) => m.tenantId === membership.tenantId);
+    const resolvedAcceptedAt = membership.acceptedAt !== undefined ? membership.acceptedAt : new Date();
     if (existing) {
       existing.role = membership.role;
+      existing.acceptedAt = resolvedAcceptedAt;
     } else {
-      list.push(membership);
+      list.push({
+        ...membership,
+        acceptedAt: resolvedAcceptedAt,
+      });
     }
     this.memberships.set(userId, list);
+  }
+
+  updateMembershipAccepted(userId: string, tenantId: string, acceptedAt: Date) {
+    const list = this.memberships.get(userId) || [];
+    const item = list.find((m) => m.tenantId === tenantId);
+    if (item) {
+      item.acceptedAt = acceptedAt;
+    }
   }
 
   updateMembershipRole(userId: string, tenantId: string, role: TenantRole) {
@@ -102,14 +117,16 @@ class InMemoryUserStore {
 export const inMemoryUserStore = new InMemoryUserStore();
 
 export class UserRepository {
-  private useMemory: boolean;
+  private forceMemory: boolean;
 
   constructor(forceMemory: boolean = false) {
-    this.useMemory =
-      forceMemory ||
-      (process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-        ? false
-        : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432"));
+    this.forceMemory = forceMemory;
+  }
+
+  private get useMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.forceMemory) return true;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
   }
 
   async create(data: {
@@ -130,7 +147,8 @@ export class UserRepository {
           platformRole: data.platformRole || "USER",
         },
       })) as UserRecord;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("UserRepository.create", err);
       return inMemoryUserStore.create(data);
     }
   }
@@ -144,7 +162,8 @@ export class UserRepository {
         where: { email: email.toLowerCase() },
       });
       return (user as UserRecord) || null;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("UserRepository.findByEmail", err);
       return inMemoryUserStore.findByEmail(email);
     }
   }
@@ -156,7 +175,8 @@ export class UserRepository {
     try {
       const user = await db.user.findUnique({ where: { id } });
       return (user as UserRecord) || null;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("UserRepository.findById", err);
       return inMemoryUserStore.findById(id);
     }
   }
@@ -184,7 +204,8 @@ export class UserRepository {
         },
       });
       return (user as unknown as UserWithMemberships) || null;
-    } catch {
+    } catch (err) {
+      handleRepositoryError("UserRepository.findWithMemberships", err);
       return inMemoryUserStore.findWithMemberships(id);
     }
   }

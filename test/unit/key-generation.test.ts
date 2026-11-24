@@ -1,7 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { KeyService, encodeBase58 } from "@/lib/crypto/key-service";
 
 describe("ECDSA NIST P-256 Key Generation & Cryptographic Operations", () => {
+  beforeAll(() => {
+    KeyService.setMasterKeyForTesting("zlWXisXpyUfdlbhE31iIHkuRx6gmTt0I6WIIaFffrE8=");
+  });
+
+  afterAll(() => {
+    KeyService.resetMasterKeyForTesting();
+  });
   it("should generate a valid ECDSA P-256 key pair with JWK, Multibase, PEM, and fingerprint", () => {
     const keyPair = KeyService.generateEcdsaKeyPair();
 

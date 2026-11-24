@@ -11,6 +11,7 @@
 
 import { prisma } from "../db.ts";
 import type { CredentialState, MerkleInclusionProof } from "../../types/index.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export interface StoredCredentialRecord {
   id: string;
@@ -67,10 +68,21 @@ export class CredentialRepository {
   private static inMemoryPdfBuffers = new Map<string, Uint8Array>();
   private static inMemoryBatchZips = new Map<string, Uint8Array>();
   private static inMemoryMerkleProofs = new Map<string, MerkleInclusionProof>();
-  private static useMemory =
-    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-      ? false
-      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static manualMemoryOverride: boolean | null = null;
+
+  public static setUseMemory(val: boolean): void {
+    this.manualMemoryOverride = val;
+  }
+
+  public static getUseMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.manualMemoryOverride !== null) return this.manualMemoryOverride;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  }
+
+  private static get useMemory(): boolean {
+    return this.getUseMemory();
+  }
 
   /**
    * Resets all in-memory credential stores for hermetic testing.
@@ -80,6 +92,7 @@ export class CredentialRepository {
     this.inMemoryPdfBuffers.clear();
     this.inMemoryBatchZips.clear();
     this.inMemoryMerkleProofs.clear();
+    this.manualMemoryOverride = null;
   }
 
   /**
@@ -164,8 +177,8 @@ export class CredentialRepository {
             vcPayloadJson: vcPayloadJson as any,
           },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.updateCredentialPayload", err);
       }
     }
 
@@ -239,8 +252,8 @@ export class CredentialRepository {
         });
         this.inMemoryCredentials.set(record.id, record);
         return record;
-      } catch {
-        // Fall back to in-memory store
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.createCredential", err);
       }
     }
 
@@ -317,8 +330,8 @@ export class CredentialRepository {
             updatedAt: found.updatedAt,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.findCredentialById", err);
       }
     }
 
@@ -373,8 +386,8 @@ export class CredentialRepository {
             updatedAt: found.updatedAt,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.findCredentialByCertificateNumber", err);
       }
     }
 
@@ -441,8 +454,8 @@ export class CredentialRepository {
             updatedAt: found.updatedAt,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.findCredentialByPublicId", err);
       }
     }
 
@@ -480,8 +493,8 @@ export class CredentialRepository {
             revokedAt: cred.revokedAt,
           },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("CredentialRepository.revokeCredential", err);
       }
     }
 

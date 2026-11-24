@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { BatchProcessingService } from "@/lib/services/batch-processing-service";
+import {
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
 
 export async function POST(
   request: NextRequest,
@@ -8,7 +13,17 @@ export async function POST(
 ) {
   try {
     const { slug, id } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "batches:issue");
+
+    const rateLimitKey = `tenant:${ctx.tenantId}`;
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: rateLimitKey,
+      ...RATE_LIMIT_PROFILES.BATCH_PROCESS,
+    });
+
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "batch processing");
+    }
 
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
     const result = await BatchProcessingService.processBatch(slug, id, ctx.session, baseUrl);

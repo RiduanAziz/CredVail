@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { RevocationFreshnessService } from "@/lib/services/revocation-freshness-service";
+import {
+  getClientIp,
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
+import { credentialIdSchema, validateParam } from "@/lib/validation/api-validators";
 
 /**
  * GET /api/v1/verify/freshness/[id]
@@ -11,7 +18,19 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const ip = getClientIp(request);
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: ip,
+      ...RATE_LIMIT_PROFILES.VERIFY_FRESHNESS,
+    });
+
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "freshness evaluation");
+    }
+
+    const { id: rawId } = await params;
+    const id = validateParam(rawId, credentialIdSchema);
+
     const url = new URL(request.url);
     const ttlParam = url.searchParams.get("ttl");
     const maxSnapshotAgeSeconds = ttlParam ? parseInt(ttlParam, 10) : undefined;

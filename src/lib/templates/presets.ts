@@ -16,6 +16,20 @@ export const DEFAULT_PAGE_DIMENSIONS: PageDimensions = {
 };
 
 export const STANDARD_PLACEHOLDERS = [
+  // Master Roadmap Phase 5 Dot-Notation Placeholders
+  { key: "{{recipient.name}}", label: "Recipient Full Name", sample: "Dr. Eleanor Vance" },
+  { key: "{{recipient.email}}", label: "Recipient Email Address", sample: "eleanor.vance@stanford.edu" },
+  { key: "{{credential.title}}", label: "Credential / Course / Award Title", sample: "Advanced Cryptographic Engineering" },
+  { key: "{{credential.description}}", label: "Credential Description", sample: "Demonstrated mastery of distributed consensus and zero-knowledge proofs." },
+  { key: "{{credential.certificateNumber}}", label: "Certificate Unique Number", sample: "CREDVAIL-2026-000001" },
+  { key: "{{issuer.name}}", label: "Issuing Organization Name", sample: "Apex Institute of Technology" },
+  { key: "{{credential.issueDate}}", label: "Issuance Date", sample: "November 15, 2026" },
+  { key: "{{credential.expiryDate}}", label: "Expiration Date", sample: "November 15, 2028" },
+  { key: "{{completion.date}}", label: "Completion Date", sample: "October 30, 2026" },
+  { key: "{{instructor.name}}", label: "Lead Instructor / Dean", sample: "Prof. Alan Turing, FRS" },
+  { key: "{{credential.verificationUrl}}", label: "Cryptographic Verification Link", sample: "https://credvail.io/verify/CREDVAIL-2026-000001" },
+
+  // Standard Snake-Case Placeholders (Backwards Compatibility)
   { key: "{{recipient_name}}", label: "Recipient Full Name", sample: "Dr. Eleanor Vance" },
   { key: "{{certificate_number}}", label: "Certificate Number", sample: "CREDVAIL-2026-000001" },
   { key: "{{course_name}}", label: "Course / Event / Award Title", sample: "Advanced Cryptographic Engineering" },
@@ -25,6 +39,23 @@ export const STANDARD_PLACEHOLDERS = [
   { key: "{{grade}}", label: "Grade / Honors", sample: "First Class with Distinction" },
   { key: "{{instructor_name}}", label: "Lead Instructor / Director", sample: "Prof. Alan Turing, FRS" },
   { key: "{{verification_url}}", label: "Cryptographic Verification Link", sample: "https://credvail.io/verify/CREDVAIL-2026-000001" },
+];
+
+export const SUPPORTED_FONT_FAMILIES = [
+  { name: "Inter", cssFamily: "Inter, sans-serif", category: "sans-serif" },
+  { name: "Georgia", cssFamily: "Georgia, serif", category: "serif" },
+  { name: "Playfair Display", cssFamily: "'Playfair Display', Georgia, serif", category: "serif" },
+  { name: "Cinzel", cssFamily: "Cinzel, serif", category: "display" },
+  { name: "Montserrat", cssFamily: "Montserrat, sans-serif", category: "sans-serif" },
+  { name: "Courier New", cssFamily: "'Courier New', monospace", category: "monospace" },
+];
+
+export const SUPPORTED_BORDER_STYLES = [
+  { id: "classic", name: "Classic Double Border", description: "Traditional institutional double border with gold inset" },
+  { id: "modern", name: "Modern Minimal Line", description: "Clean single-line geometric border" },
+  { id: "ornate", name: "Ornate Academic Flourish", description: "Corner rosettes and detailed diploma accenting" },
+  { id: "minimal", name: "Subtle Micro Frame", description: "Delicate hairline frame for contemporary designs" },
+  { id: "none", name: "Border Free", description: "Unbounded edge-to-edge canvas" },
 ];
 
 export interface TemplatePresetDefinition {

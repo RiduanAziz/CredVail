@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { slug, id } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "credentials:read");
 
     const { zipBytes, batchNumber } = await BatchProcessingService.getBatchZip(slug, id, ctx.session);
 

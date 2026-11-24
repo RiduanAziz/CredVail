@@ -53,3 +53,7 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 *.db
+
+# Agent Skills
+.agent/skills/
+.agents/skills/

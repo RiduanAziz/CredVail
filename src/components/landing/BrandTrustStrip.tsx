@@ -14,38 +14,38 @@ export function BrandTrustStrip() {
   const { trustStrip } = LANDING_CONTENT;
 
   return (
-    <section id="brand-trust" className="relative border-y border-black/8 bg-white/45 backdrop-blur-md py-14 sm:py-16">
+    <section id="brand-trust" className="relative border-y border-black/[0.08] bg-white/60 py-16">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6">
-        {/* Subtle Section Eyebrow Header */}
-        <p className="text-center font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-[#6B7280]">
+        {/* Section Header */}
+        <p className="text-center text-xs font-medium uppercase tracking-[0.14em] text-[#64748B]">
           {trustStrip.header}
         </p>
 
         {/* 4 Pillars Grid */}
-        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {trustStrip.pillars.map((pillar) => {
             const IconComponent = iconMap[pillar.iconName];
             return (
               <div
                 key={pillar.id}
-                className="group relative rounded-2xl border border-black/8 bg-white/80 p-6 backdrop-blur-md transition-all duration-300 hover:border-brand-cobalt/40 hover:bg-white hover:shadow-lg hover:-translate-y-1"
+                className="relative rounded-xl border border-black/[0.08] bg-white p-6 shadow-sm transition-colors hover:border-black/20"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy transition-colors group-hover:bg-brand-cobalt group-hover:text-white">
-                    <IconComponent className="h-5 w-5" />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#0F1D38]/[0.06] text-[#0F1D38]">
+                    <IconComponent className="h-4.5 w-4.5" />
                   </div>
-                  <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-brand-cobalt bg-blue-50 px-2 py-0.5 rounded">
+                  <span className="font-mono text-[11px] font-medium text-[#475569] bg-slate-100 px-2 py-0.5 rounded">
                     {pillar.metric}
                   </span>
                 </div>
 
-                <h3 className="mt-5 text-base font-bold text-[#0F1D38]">
+                <h3 className="mt-4 text-base font-semibold text-[#0F172A]">
                   {pillar.title}
                 </h3>
-                <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600 mt-0.5">
+                <p className="text-xs font-medium text-[#64748B] mt-0.5">
                   {pillar.tagline}
                 </p>
-                <p className="mt-2.5 text-xs leading-relaxed text-[#6B7280]">
+                <p className="mt-2.5 text-xs leading-relaxed text-[#475569]">
                   {pillar.description}
                 </p>
               </div>

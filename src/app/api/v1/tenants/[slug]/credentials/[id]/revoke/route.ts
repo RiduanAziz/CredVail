@@ -8,7 +8,7 @@ export async function POST(
 ) {
   try {
     const { slug, id } = await params;
-    const context = extractTenantContext(request, slug, "batches:issue");
+    const context = extractTenantContext(request, slug, "credentials:revoke");
 
     const body = await request.json().catch(() => ({}));
     const reason = body.reason || "Revoked by institutional authority";

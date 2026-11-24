@@ -29,17 +29,17 @@ export function Navbar() {
     >
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2.5 font-bold text-xl tracking-tight group">
+          <Link href="/" className="flex items-center gap-2.5 font-bold text-lg tracking-tight">
             <Image
               src="/brand/brand-symbol-64.png"
               alt="CREDVAIL Brand Symbol"
-              width={34}
-              height={34}
-              className="h-8.5 w-8.5 rounded-lg shadow-sm object-contain transition-transform group-hover:scale-105"
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-md object-contain"
               priority
             />
-            <span className={isHome ? "text-[#0F1D38]" : undefined}>
-              CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span>
+            <span className="font-sans text-[#0F1D38] font-bold">
+              CREDVAIL
             </span>
           </Link>
           <nav
@@ -97,9 +97,9 @@ export function Navbar() {
           <Link href="/register">
             <Button
               size="sm"
-              className="gap-1.5 rounded-xl bg-[#0F1D38] px-4 text-xs font-semibold text-white shadow-sm hover:bg-[#152445]"
+              className="gap-1.5 rounded-lg bg-[#0F1D38] px-4 text-xs font-medium text-white shadow-none hover:bg-[#152445] transition-colors"
             >
-              <span>Institution Portal</span>
+              <span>Institution portal</span>
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
           </Link>

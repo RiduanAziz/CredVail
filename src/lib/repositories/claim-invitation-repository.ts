@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "../db.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export class ClaimError extends Error {
   readonly code: string;
@@ -140,17 +141,25 @@ export interface CreateInvitationInput {
 
 export class ClaimInvitationRepository {
   private static inMemoryInvitations = new Map<string, StoredClaimInvitation>();
-  private static useMemory =
-    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-      ? false
-      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static manualMemoryOverride: boolean | null = null;
+
+  public static setUseMemory(val: boolean): void {
+    this.manualMemoryOverride = val;
+  }
+
+  public static getUseMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.manualMemoryOverride !== null) return this.manualMemoryOverride;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  }
+
+  private static get useMemory(): boolean {
+    return this.getUseMemory();
+  }
 
   static resetInMemoryStore(): void {
     this.inMemoryInvitations.clear();
-    this.useMemory =
-      process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-        ? false
-        : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+    this.manualMemoryOverride = null;
   }
 
   static async createInvitation(input: CreateInvitationInput): Promise<StoredClaimInvitation> {
@@ -199,7 +208,8 @@ export class ClaimInvitationRepository {
         createdAt: created.createdAt,
       };
     } catch (err) {
-      if (process.env.REQUIRE_POSTGRES_INTEGRATION === "true" || !this.useMemory) {
+      if (!isInMemoryFallbackPermissible() || !this.useMemory) {
+        handleRepositoryError("ClaimInvitationRepository.createInvitation", err);
         throw err;
       }
       this.inMemoryInvitations.set(record.tokenHash, record);
@@ -218,7 +228,7 @@ export class ClaimInvitationRepository {
       });
 
       if (!found) {
-        if (process.env.REQUIRE_POSTGRES_INTEGRATION === "true" || !this.useMemory) {
+        if (!isInMemoryFallbackPermissible() || !this.useMemory) {
           return null;
         }
         return this.inMemoryInvitations.get(tokenHash) || null;
@@ -238,19 +248,12 @@ export class ClaimInvitationRepository {
         createdAt: found.createdAt,
       };
     } catch (err) {
-      if (process.env.REQUIRE_POSTGRES_INTEGRATION === "true" || !this.useMemory) {
+      if (!isInMemoryFallbackPermissible() || !this.useMemory) {
+        handleRepositoryError("ClaimInvitationRepository.findByTokenHash", err);
         throw err;
       }
       return this.inMemoryInvitations.get(tokenHash) || null;
     }
-  }
-
-  static setUseMemory(val: boolean): void {
-    this.useMemory = val;
-  }
-
-  static getUseMemory(): boolean {
-    return this.useMemory;
   }
 
   /**

@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { slug, id } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "credentials:read");
 
     const batch = await BatchService.getBatchById(slug, id, ctx.session);
 
@@ -39,7 +39,7 @@ export async function DELETE(
 ) {
   try {
     const { slug, id } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "batches:create");
 
     const deleted = await BatchService.deleteBatch(slug, id, ctx.session);
 

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { BatchService } from "@/lib/services/batch-service";
+import {
+  checkApiRateLimit,
+  createRateLimitResponse,
+  RATE_LIMIT_PROFILES,
+} from "@/lib/services/api-rate-limiter";
 
 export async function POST(
   request: NextRequest,
@@ -8,7 +13,17 @@ export async function POST(
 ) {
   try {
     const { slug } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "batches:create");
+
+    const rateLimitKey = `tenant:${ctx.tenantId}:user:${ctx.userId}`;
+    const { allowed, retryAfter } = await checkApiRateLimit({
+      identifier: rateLimitKey,
+      ...RATE_LIMIT_PROFILES.BATCH_UPLOAD,
+    });
+
+    if (!allowed) {
+      return createRateLimitResponse(retryAfter, "batch upload");
+    }
 
     const contentType = request.headers.get("content-type") || "";
 

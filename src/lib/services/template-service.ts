@@ -10,12 +10,26 @@ import {
   TemplateLayoutConfig,
   PageDimensions,
 } from "@/types/template";
-import { STANDARD_PLACEHOLDERS, DEFAULT_PAGE_DIMENSIONS } from "@/lib/templates/presets";
-import { PdfGenerator } from "@/lib/pdf/pdf-generator";
+import {
+  STANDARD_PLACEHOLDERS,
+  DEFAULT_PAGE_DIMENSIONS,
+  TEMPLATE_PRESETS,
+  SUPPORTED_FONT_FAMILIES,
+  SUPPORTED_BORDER_STYLES,
+} from "@/lib/templates/presets";
+import { PdfGenerator, replacePlaceholders } from "@/lib/pdf/pdf-generator";
+
+const hexColorSchema = z
+  .string()
+  .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, "Must be a valid 3- or 6-digit hex color");
 
 export const createTemplateInputSchema = z.object({
-  title: z.string().min(2, "Template title must be at least 2 characters long"),
-  description: z.string().optional(),
+  title: z
+    .string()
+    .trim()
+    .min(2, "Template title must be at least 2 characters long")
+    .max(120, "Template title must not exceed 120 characters"),
+  description: z.string().trim().max(500).optional(),
   category: z.enum([
     "COURSE_COMPLETION",
     "EVENT_PARTICIPATION",
@@ -30,69 +44,69 @@ export const createTemplateInputSchema = z.object({
   ] as const),
   dimensions: z
     .object({
-      width: z.number().positive(),
-      height: z.number().positive(),
+      width: z.number().min(400, "Width must be at least 400px").max(4000, "Width cannot exceed 4000px"),
+      height: z.number().min(400, "Height must be at least 400px").max(4000, "Height cannot exceed 4000px"),
       orientation: z.enum(["LANDSCAPE", "PORTRAIT"]),
       unit: z.enum(["PX", "MM"]),
     })
     .optional(),
   layoutConfig: z.object({
-    backgroundColor: z.string(),
-    secondaryBackgroundColor: z.string().optional(),
+    backgroundColor: hexColorSchema,
+    secondaryBackgroundColor: hexColorSchema.optional(),
     border: z.object({
       style: z.enum(["classic", "modern", "ornate", "minimal", "none"]),
-      color: z.string(),
-      secondaryColor: z.string().optional(),
-      width: z.number(),
+      color: hexColorSchema,
+      secondaryColor: hexColorSchema.optional(),
+      width: z.number().min(0).max(60),
     }),
     logo: z.object({
       url: z.string().optional(),
-      x: z.number(),
-      y: z.number(),
-      width: z.number(),
-      height: z.number(),
+      x: z.number().min(0).max(100),
+      y: z.number().min(0).max(100),
+      width: z.number().min(10).max(400),
+      height: z.number().min(10).max(400),
     }),
     fields: z.array(
       z.object({
-        id: z.string(),
-        name: z.string(),
-        placeholder: z.string(),
-        defaultValue: z.string(),
-        x: z.number(),
-        y: z.number(),
+        id: z.string().min(1),
+        name: z.string().min(1),
+        placeholder: z.string().min(1),
+        defaultValue: z.string().default(""),
+        x: z.number().min(0).max(100),
+        y: z.number().min(0).max(100),
         width: z.number().optional(),
         height: z.number().optional(),
-        fontSize: z.number(),
-        fontFamily: z.string(),
+        fontSize: z.number().min(6).max(140),
+        fontFamily: z.string().min(1),
         fontWeight: z.enum(["normal", "medium", "semibold", "bold"]),
         fontStyle: z.enum(["normal", "italic"]).optional(),
-        color: z.string(),
+        color: hexColorSchema,
         align: z.enum(["left", "center", "right"]),
         isMandatory: z.boolean().optional(),
       })
     ),
     signatures: z.array(
       z.object({
-        id: z.string(),
-        title: z.string(),
-        signatoryName: z.string(),
+        id: z.string().min(1),
+        title: z.string().min(1),
+        signatoryName: z.string().min(1),
         signatureImageUrl: z.string().optional(),
-        x: z.number(),
-        y: z.number(),
-        width: z.number(),
-        height: z.number(),
+        x: z.number().min(0).max(100),
+        y: z.number().min(0).max(100),
+        width: z.number().min(10).max(500),
+        height: z.number().min(10).max(300),
       })
     ),
     qrCode: z.object({
-      x: z.number(),
-      y: z.number(),
-      size: z.number(),
+      x: z.number().min(0).max(100),
+      y: z.number().min(0).max(100),
+      size: z.number().min(48).max(300),
       errorCorrectionLevel: z.enum(["L", "M", "Q", "H"]),
       includeMargin: z.boolean(),
       color: z
         .object({
-          dark: z.string(),
-          light: z.string(),
+          dark: hexColorSchema,
+          light: hexColorSchema,
         })
         .optional(),
     }),
@@ -100,6 +114,40 @@ export const createTemplateInputSchema = z.object({
   }),
   backgroundImageUrl: z.string().url("Must be a valid URL").optional(),
   isDefault: z.boolean().optional(),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).optional(),
+});
+
+export const updateTemplateInputSchema = z.object({
+  title: z.string().trim().min(2).max(120).optional(),
+  description: z.string().trim().max(500).nullable().optional(),
+  category: z.enum([
+    "COURSE_COMPLETION",
+    "EVENT_PARTICIPATION",
+    "INTERNSHIP_COMPLETION",
+    "TRAINING_COMPLETION",
+    "ACHIEVEMENT",
+    "APPRECIATION",
+    "MEMBERSHIP",
+    "WORKSHOP_ATTENDANCE",
+    "COMPETITION_PARTICIPATION",
+    "CUSTOM",
+  ] as const).optional(),
+  dimensions: z
+    .object({
+      width: z.number().min(400).max(4000),
+      height: z.number().min(400).max(4000),
+      orientation: z.enum(["LANDSCAPE", "PORTRAIT"]),
+      unit: z.enum(["PX", "MM"]),
+    })
+    .optional(),
+  layoutConfig: z.any().optional(),
+  backgroundImageUrl: z.string().nullable().optional(),
+  isDefault: z.boolean().optional(),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).optional(),
+});
+
+export const duplicateTemplateInputSchema = z.object({
+  newTitle: z.string().trim().min(2).max(120).optional(),
 });
 
 export interface RenderedTemplatePreview {
@@ -224,14 +272,15 @@ export class TemplateService {
   async listTemplates(
     slug: string,
     session: SessionPayload,
-    category?: TemplateCategory
+    category?: TemplateCategory,
+    includeArchived?: boolean
   ): Promise<CertificateTemplateRecord[]> {
     const { tenant } = await this.getAuthorizedTenant(slug, session);
 
     // Auto-seed presets if first time
     await this.templateRepo.seedPresetsIfEmpty(tenant.id, tenant.name);
 
-    return await this.templateRepo.listTemplates(tenant.id, category);
+    return await this.templateRepo.listTemplates(tenant.id, category, includeArchived);
   }
 
   /**
@@ -267,7 +316,8 @@ export class TemplateService {
       assertTenantPermission(callerMembership?.role, "templates:update");
     }
 
-    const updated = await this.templateRepo.updateTemplate(tenant.id, templateId, input);
+    const validated = updateTemplateInputSchema.parse(input);
+    const updated = await this.templateRepo.updateTemplate(tenant.id, templateId, validated);
 
     await this.tenantRepo.recordAuditLog({
       tenantId: tenant.id,
@@ -276,10 +326,84 @@ export class TemplateService {
       action: "TEMPLATE_UPDATED",
       resourceType: "CertificateTemplate",
       resourceId: templateId,
-      metadata: { changedFields: Object.keys(input) },
+      metadata: { changedFields: Object.keys(input), version: updated.version },
     });
 
     return updated;
+  }
+
+  /**
+   * Duplicates an existing certificate template into a new independent version.
+   */
+  async duplicateTemplate(
+    slug: string,
+    templateId: string,
+    session: SessionPayload,
+    newTitle?: string
+  ): Promise<CertificateTemplateRecord> {
+    const { tenant, callerMembership, isPlatformAdmin } = await this.getAuthorizedTenant(slug, session);
+
+    if (!isPlatformAdmin) {
+      assertTenantPermission(callerMembership?.role, "templates:create");
+    }
+
+    const duplicated = await this.templateRepo.duplicateTemplate(tenant.id, templateId, newTitle);
+
+    await this.tenantRepo.recordAuditLog({
+      tenantId: tenant.id,
+      userId: session.sub,
+      userEmail: session.email,
+      action: "TEMPLATE_DUPLICATED",
+      resourceType: "CertificateTemplate",
+      resourceId: duplicated.id,
+      metadata: { originalTemplateId: templateId, title: duplicated.title },
+    });
+
+    return duplicated;
+  }
+
+  /**
+   * Archives a certificate template, preventing new issuances while preserving historical integrity.
+   */
+  async archiveTemplate(
+    slug: string,
+    templateId: string,
+    session: SessionPayload
+  ): Promise<CertificateTemplateRecord> {
+    const { tenant, callerMembership, isPlatformAdmin } = await this.getAuthorizedTenant(slug, session);
+
+    if (!isPlatformAdmin) {
+      assertTenantPermission(callerMembership?.role, "templates:update");
+    }
+
+    const archived = await this.templateRepo.archiveTemplate(tenant.id, templateId);
+
+    await this.tenantRepo.recordAuditLog({
+      tenantId: tenant.id,
+      userId: session.sub,
+      userEmail: session.email,
+      action: "TEMPLATE_ARCHIVED",
+      resourceType: "CertificateTemplate",
+      resourceId: templateId,
+      metadata: { templateId, title: archived.title },
+    });
+
+    return archived;
+  }
+
+  /**
+   * Retrieves the system preset gallery, standard placeholders, default dimensions, and typography options.
+   */
+  async getPresetGallery(slug: string, session: SessionPayload) {
+    await this.getAuthorizedTenant(slug, session);
+
+    return {
+      presets: Object.values(TEMPLATE_PRESETS),
+      standardPlaceholders: STANDARD_PLACEHOLDERS,
+      defaultDimensions: DEFAULT_PAGE_DIMENSIONS,
+      supportedFonts: SUPPORTED_FONT_FAMILIES,
+      supportedBorders: SUPPORTED_BORDER_STYLES,
+    };
   }
 
   /**
@@ -326,26 +450,26 @@ export class TemplateService {
     const template = await this.templateRepo.getTemplateById(tenant.id, templateId);
     if (!template) throw new Error(`Template '${templateId}' not found`);
 
-    // Build replacement dictionary
+    // Build replacement dictionary supporting dot-notation and snake_case
     const replacements: Record<string, string> = {
-      "{{recipient_name}}": "Dr. Eleanor Vance",
-      "{{certificate_number}}": "CREDVAIL-2026-000001",
-      "{{course_name}}": "Advanced Cryptographic Engineering",
-      "{{organization_name}}": tenant.name,
-      "{{issue_date}}": new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-      "{{completion_date}}": new Date(Date.now() - 86400000 * 15).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-      "{{grade}}": "First Class with Distinction",
-      "{{instructor_name}}": "Prof. Alan Turing, FRS",
-      "{{verification_url}}": `https://credvail.io/verify/CREDVAIL-2026-000001`,
+      recipient_name: "Dr. Eleanor Vance",
+      certificate_number: "CREDVAIL-2026-000001",
+      course_name: "Advanced Cryptographic Engineering",
+      organization_name: tenant.name,
+      issue_date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      completion_date: new Date(Date.now() - 86400000 * 15).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      expiry_date: new Date(Date.now() + 86400000 * 730).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      grade: "First Class with Distinction",
+      instructor_name: "Prof. Alan Turing, FRS",
+      description: template.description || "In recognition of outstanding achievement and verified competency.",
+      verification_url: `https://credvail.io/verify/CREDVAIL-2026-000001`,
       ...(sampleOverrides || {}),
     };
 
-    // Resolve text fields
+    // Resolve text fields using comprehensive placeholder normalization
     const resolvedFields = template.layoutConfig.fields.map((field) => {
-      let text = field.placeholder;
-      for (const [key, value] of Object.entries(replacements)) {
-        text = text.replace(new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), value);
-      }
+      const rawText = field.placeholder || field.defaultValue || "";
+      const text = replacePlaceholders(rawText, replacements);
 
       return {
         id: field.id,
@@ -363,7 +487,11 @@ export class TemplateService {
     });
 
     // Generate real QR Code data URL
-    const verificationUrl = replacements["{{verification_url}}"] || `https://credvail.io/verify/CREDVAIL-2026-000001`;
+    const verificationUrl =
+      replacements["verification_url"] ||
+      replacements["credential.verificationUrl"] ||
+      `https://credvail.io/verify/CREDVAIL-2026-000001`;
+
     const qrDataUrl = await QRCode.toDataURL(verificationUrl, {
       errorCorrectionLevel: template.layoutConfig.qrCode.errorCorrectionLevel || "M",
       margin: template.layoutConfig.qrCode.includeMargin ? 1 : 0,
@@ -426,19 +554,24 @@ export class TemplateService {
     if (!template) throw new Error(`Template '${templateId}' not found`);
 
     const replacements: Record<string, string> = {
-      "{{recipient_name}}": "Dr. Eleanor Vance",
-      "{{certificate_number}}": "CREDVAIL-2026-000001",
-      "{{course_name}}": "Advanced Cryptographic Engineering",
-      "{{organization_name}}": tenant.name,
-      "{{issue_date}}": new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-      "{{completion_date}}": new Date(Date.now() - 86400000 * 15).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-      "{{grade}}": "First Class with Distinction",
-      "{{instructor_name}}": "Prof. Alan Turing, FRS",
-      "{{verification_url}}": `https://credvail.io/verify/CREDVAIL-2026-000001`,
+      recipient_name: "Dr. Eleanor Vance",
+      certificate_number: "CREDVAIL-2026-000001",
+      course_name: "Advanced Cryptographic Engineering",
+      organization_name: tenant.name,
+      issue_date: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      completion_date: new Date(Date.now() - 86400000 * 15).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      expiry_date: new Date(Date.now() + 86400000 * 730).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+      grade: "First Class with Distinction",
+      instructor_name: "Prof. Alan Turing, FRS",
+      description: template.description || "In recognition of outstanding achievement and verified competency.",
+      verification_url: `https://credvail.io/verify/CREDVAIL-2026-000001`,
       ...(sampleOverrides || {}),
     };
 
-    const verificationUrl = replacements["{{verification_url}}"] || `https://credvail.io/verify/CREDVAIL-2026-000001`;
+    const verificationUrl =
+      replacements["verification_url"] ||
+      replacements["credential.verificationUrl"] ||
+      `https://credvail.io/verify/CREDVAIL-2026-000001`;
 
     const pdfBytes = await PdfGenerator.generateCertificate({
       template,

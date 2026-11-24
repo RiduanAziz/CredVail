@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { TemplateService } from "@/lib/services/template-service";
+import { checkApiRateLimit, createRateLimitResponse } from "@/lib/services/api-rate-limiter";
 
 const templateService = new TemplateService();
 
@@ -42,8 +43,19 @@ export async function PUT(
   try {
     const { slug, id } = await params;
     const ctx = extractTenantContext(request, slug, "templates:update");
-    const body = await request.json();
 
+    // Rate limiting on template modification
+    const rateLimit = await checkApiRateLimit({
+      identifier: `${ctx.session.sub}:${slug}`,
+      scope: "templates:mutation",
+      maxAttempts: 30,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit.retryAfter || 60);
+    }
+
+    const body = await request.json();
     const updated = await templateService.updateTemplate(slug, id, body, ctx.session);
 
     return NextResponse.json({
@@ -52,15 +64,17 @@ export async function PUT(
     });
   } catch (error: any) {
     const isForbidden = error.name === "AuthorizationError" || error.message?.includes("Forbidden");
+    const isArchived = error.message?.includes("archived");
+
     return NextResponse.json(
       {
         success: false,
         error: {
-          code: isForbidden ? "FORBIDDEN" : "UPDATE_FAILED",
+          code: isForbidden ? "FORBIDDEN" : isArchived ? "TEMPLATE_ARCHIVED" : "UPDATE_FAILED",
           message: error.message || "Failed to update template",
         },
       },
-      { status: isForbidden ? 403 : 400 }
+      { status: isForbidden ? 403 : isArchived ? 400 : 400 }
     );
   }
 }
@@ -72,6 +86,17 @@ export async function DELETE(
   try {
     const { slug, id } = await params;
     const ctx = extractTenantContext(request, slug, "templates:delete");
+
+    // Rate limiting on template deletion
+    const rateLimit = await checkApiRateLimit({
+      identifier: `${ctx.session.sub}:${slug}`,
+      scope: "templates:mutation",
+      maxAttempts: 30,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit.retryAfter || 60);
+    }
 
     const success = await templateService.deleteTemplate(slug, id, ctx.session);
 

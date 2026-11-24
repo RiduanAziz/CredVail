@@ -13,6 +13,7 @@
 import { prisma } from "../db.ts";
 import { KeyService } from "../crypto/key-service.ts";
 import type { GeneratedKeyPair, EcdsaPublicKeyJwk } from "../crypto/key-service.ts";
+import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
 
 export interface StoredIssuerKey {
   id: string;
@@ -37,16 +38,28 @@ export interface StoredIssuerKey {
 
 export class KeyRepository {
   private static inMemoryKeys = new Map<string, StoredIssuerKey>();
-  private static useMemory =
-    process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
-      ? false
-      : !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  private static manualMemoryOverride: boolean | null = null;
+
+  public static setUseMemory(val: boolean): void {
+    this.manualMemoryOverride = val;
+  }
+
+  public static getUseMemory(): boolean {
+    if (!isInMemoryFallbackPermissible()) return false;
+    if (this.manualMemoryOverride !== null) return this.manualMemoryOverride;
+    return !process.env.DATABASE_URL || process.env.DATABASE_URL.includes("localhost:5432");
+  }
+
+  private static get useMemory(): boolean {
+    return this.getUseMemory();
+  }
 
   /**
    * Resets the in-memory key store for hermetic test suites.
    */
   static resetInMemoryStore(): void {
     this.inMemoryKeys.clear();
+    this.manualMemoryOverride = null;
   }
 
   /**
@@ -99,8 +112,8 @@ export class KeyRepository {
         });
         this.inMemoryKeys.set(initialKey.id, initialKey);
         return initialKey;
-      } catch {
-        // Fall back to in-memory store
+      } catch (err) {
+        handleRepositoryError("KeyRepository.getOrCreateInitialKey", err);
       }
     }
 
@@ -112,13 +125,16 @@ export class KeyRepository {
    * Retrieves the currently active signing key for a tenant.
    */
   static async getActiveKey(tenantId: string): Promise<StoredIssuerKey | null> {
-    for (const key of this.inMemoryKeys.values()) {
-      if (key.tenantId === tenantId && key.isActive && !key.isCompromised) {
-        return key;
+    if (this.useMemory) {
+      for (const key of this.inMemoryKeys.values()) {
+        if (key.tenantId === tenantId && key.isActive && !key.isCompromised) {
+          return key;
+        }
       }
+      return null;
     }
 
-    if (!this.useMemory && prisma) {
+    if (prisma) {
       try {
         const found = await prisma.issuerKey.findFirst({
           where: { tenantId, isActive: true, isCompromised: false },
@@ -126,13 +142,7 @@ export class KeyRepository {
         });
 
         if (found) {
-          // Reconstitute from stored attributes
-          let pem = "";
-          try {
-            pem = KeyService.multibaseToPublicKeyPem(found.publicKeyMultibase);
-          } catch {
-            // fallback
-          }
+          const details = KeyService.multibaseToPublicKeyDetails(found.publicKeyMultibase);
 
           const stored: StoredIssuerKey = {
             id: found.id,
@@ -140,11 +150,11 @@ export class KeyRepository {
             keyEpoch: found.keyEpoch,
             keyIdentifier: found.keyIdentifier,
             publicKeyMultibase: found.publicKeyMultibase,
-            publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-            publicKeyPem: pem,
+            publicKeyJwk: details.publicKeyJwk,
+            publicKeyPem: details.publicKeyPem,
             algorithm: found.algorithm,
             encryptedPrivateKey: found.encryptedPrivateKey,
-            fingerprint: found.publicKeyMultibase.slice(0, 16),
+            fingerprint: details.fingerprint,
             onChainTxHash: found.onChainTxHash,
             isActive: found.isActive,
             isCompromised: found.isCompromised,
@@ -157,8 +167,8 @@ export class KeyRepository {
           this.inMemoryKeys.set(stored.id, stored);
           return stored;
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.getActiveKey", err);
       }
     }
 
@@ -169,24 +179,22 @@ export class KeyRepository {
    * Retrieves a key epoch by its epoch number.
    */
   static async getKeyByEpoch(tenantId: string, epoch: number): Promise<StoredIssuerKey | null> {
-    for (const key of this.inMemoryKeys.values()) {
-      if (key.tenantId === tenantId && key.keyEpoch === epoch) {
-        return key;
+    if (this.useMemory) {
+      for (const key of this.inMemoryKeys.values()) {
+        if (key.tenantId === tenantId && key.keyEpoch === epoch) {
+          return key;
+        }
       }
+      return null;
     }
 
-    if (!this.useMemory && prisma) {
+    if (prisma) {
       try {
         const found = await prisma.issuerKey.findFirst({
           where: { tenantId, keyEpoch: epoch },
         });
         if (found) {
-          let pem = "";
-          try {
-            pem = KeyService.multibaseToPublicKeyPem(found.publicKeyMultibase);
-          } catch {
-            // fallback
-          }
+          const details = KeyService.multibaseToPublicKeyDetails(found.publicKeyMultibase);
 
           return {
             id: found.id,
@@ -194,11 +202,11 @@ export class KeyRepository {
             keyEpoch: found.keyEpoch,
             keyIdentifier: found.keyIdentifier,
             publicKeyMultibase: found.publicKeyMultibase,
-            publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-            publicKeyPem: pem,
+            publicKeyJwk: details.publicKeyJwk,
+            publicKeyPem: details.publicKeyPem,
             algorithm: found.algorithm,
             encryptedPrivateKey: found.encryptedPrivateKey,
-            fingerprint: found.publicKeyMultibase.slice(0, 16),
+            fingerprint: details.fingerprint,
             onChainTxHash: found.onChainTxHash,
             isActive: found.isActive,
             isCompromised: found.isCompromised,
@@ -209,8 +217,8 @@ export class KeyRepository {
             updatedAt: found.validFrom,
           };
         }
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.getKeyByEpoch", err);
       }
     }
 
@@ -221,58 +229,55 @@ export class KeyRepository {
    * Lists all key epochs for a tenant, ordered by epoch descending.
    */
   static async listKeys(tenantId: string): Promise<StoredIssuerKey[]> {
-    const keys: StoredIssuerKey[] = [];
-
-    for (const key of this.inMemoryKeys.values()) {
-      if (key.tenantId === tenantId) {
-        keys.push(key);
+    if (this.useMemory) {
+      const keys: StoredIssuerKey[] = [];
+      for (const key of this.inMemoryKeys.values()) {
+        if (key.tenantId === tenantId) {
+          keys.push(key);
+        }
       }
+      return keys.sort((a, b) => b.keyEpoch - a.keyEpoch);
     }
 
-    if (!this.useMemory && prisma) {
+    if (prisma) {
       try {
         const dbKeys = await prisma.issuerKey.findMany({
           where: { tenantId },
           orderBy: { keyEpoch: "desc" },
         });
 
+        const keys: StoredIssuerKey[] = [];
         for (const dbk of dbKeys) {
-          if (!keys.some((k) => k.id === dbk.id)) {
-            let pem = "";
-            try {
-              pem = KeyService.multibaseToPublicKeyPem(dbk.publicKeyMultibase);
-            } catch {
-              // fallback
-            }
+          const details = KeyService.multibaseToPublicKeyDetails(dbk.publicKeyMultibase);
 
-            keys.push({
-              id: dbk.id,
-              tenantId: dbk.tenantId,
-              keyEpoch: dbk.keyEpoch,
-              keyIdentifier: dbk.keyIdentifier,
-              publicKeyMultibase: dbk.publicKeyMultibase,
-              publicKeyJwk: { kty: "EC", crv: "P-256", x: "", y: "" },
-              publicKeyPem: pem,
-              algorithm: dbk.algorithm,
-              encryptedPrivateKey: dbk.encryptedPrivateKey,
-              fingerprint: dbk.publicKeyMultibase.slice(0, 16),
-              onChainTxHash: dbk.onChainTxHash,
-              isActive: dbk.isActive,
-              isCompromised: dbk.isCompromised,
-              validFrom: dbk.validFrom,
-              validTo: dbk.validTo,
-              revokedAt: dbk.revokedAt,
-              createdAt: dbk.validFrom,
-              updatedAt: dbk.validFrom,
-            });
-          }
+          keys.push({
+            id: dbk.id,
+            tenantId: dbk.tenantId,
+            keyEpoch: dbk.keyEpoch,
+            keyIdentifier: dbk.keyIdentifier,
+            publicKeyMultibase: dbk.publicKeyMultibase,
+            publicKeyJwk: details.publicKeyJwk,
+            publicKeyPem: details.publicKeyPem,
+            algorithm: dbk.algorithm,
+            encryptedPrivateKey: dbk.encryptedPrivateKey,
+            fingerprint: details.fingerprint,
+            onChainTxHash: dbk.onChainTxHash,
+            isActive: dbk.isActive,
+            isCompromised: dbk.isCompromised,
+            validFrom: dbk.validFrom,
+            validTo: dbk.validTo,
+            revokedAt: dbk.revokedAt,
+            createdAt: dbk.validFrom,
+            updatedAt: dbk.validFrom,
+          });
         }
-      } catch {
-        // Fall back
+        return keys.sort((a, b) => b.keyEpoch - a.keyEpoch);
+      } catch (err) {
+        handleRepositoryError("KeyRepository.listKeys", err);
       }
     }
 
-    return keys.sort((a, b) => b.keyEpoch - a.keyEpoch);
+    return [];
   }
 
   /**
@@ -300,8 +305,8 @@ export class KeyRepository {
           where: { tenantId, isActive: true },
           data: { isActive: false, validTo: new Date() },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.rotateKey", err);
       }
     }
 
@@ -349,8 +354,8 @@ export class KeyRepository {
         });
         this.inMemoryKeys.set(newKey.id, newKey);
         return newKey;
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.rotateKey", err);
       }
     }
 
@@ -386,8 +391,8 @@ export class KeyRepository {
             validTo: new Date(),
           },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.flagKeyCompromised", err);
       }
     }
 
@@ -411,8 +416,8 @@ export class KeyRepository {
           where: { tenantId, keyEpoch: epoch },
           data: { onChainTxHash: txHash },
         });
-      } catch {
-        // Fall back
+      } catch (err) {
+        handleRepositoryError("KeyRepository.updateKeyOnChainTx", err);
       }
     }
 

@@ -1,209 +1,302 @@
 import * as THREE from "three";
-import { CredentialSceneMeshes } from "./CredentialGeometryBuilder";
-import { LightingRig } from "./LightingRig";
 import { ResourceManager } from "./ResourceManager";
 
-export type ViewMode = "overview" | "closeup";
+export type PresetId = "full" | "identity" | "seal" | "authorization" | "reverse";
+
+export interface PresetCallout {
+  tag: string;
+  title: string;
+  body: string;
+}
+
+export interface ViewPreset {
+  id: PresetId;
+  hudLabel: string;
+  cameraPos: THREE.Vector3;
+  cameraTarget: THREE.Vector3;
+  cardRot: { x: number; y: number };
+  callout: PresetCallout | null;
+}
+
+export const VIEW_PRESETS: Record<PresetId, ViewPreset> = {
+  full: {
+    id: "full",
+    hudLabel: "Reference 01 — Floating Credential",
+    cameraPos: new THREE.Vector3(0, 0.04, 4.95),
+    cameraTarget: new THREE.Vector3(0, -0.02, 0),
+    cardRot: { x: 0.045, y: -0.15 },
+    callout: null,
+  },
+  identity: {
+    id: "identity",
+    hudLabel: "Reference 03 — Close-Up: Title & Identity",
+    cameraPos: new THREE.Vector3(-0.04, 0.56, 2.28),
+    cameraTarget: new THREE.Vector3(0, 0.52, 0.04),
+    cardRot: { x: -0.025, y: 0.05 },
+    callout: {
+      tag: "Ref 03 • Typography & Framing",
+      title: "Institutional Hierarchy & Archival Framing",
+      body: "Double-ruled navy border with inverted-arc corner flourishes, micro-text perimeter rules, and clear ILLUSTRATIVE DEMONSTRATION attribution.",
+    },
+  },
+  seal: {
+    id: "seal",
+    hudLabel: "Reference 03 — Close-Up: Seal & Guilloché",
+    cameraPos: new THREE.Vector3(0.92, -0.68, 2.08),
+    cameraTarget: new THREE.Vector3(0.52, -0.82, 0.06),
+    cardRot: { x: 0.06, y: -0.24 },
+    callout: {
+      tag: "Ref 03 • Tactile Security Relief",
+      title: "Embossed Navy Rosette & Wave Guilloché",
+      body: "Physically modeled fluted rosette medallion, beveled ribbon tails, and sweeping sinusoidal security linework cast subtle light response across cotton-porcelain stock.",
+    },
+  },
+  authorization: {
+    id: "authorization",
+    hudLabel: "Reference 03 — Close-Up: QR & Authorization",
+    cameraPos: new THREE.Vector3(-0.56, -0.74, 2.15),
+    cameraTarget: new THREE.Vector3(-0.34, -0.82, 0.04),
+    cardRot: { x: 0.03, y: 0.13 },
+    callout: {
+      tag: "Ref 03 • Verification Metadata",
+      title: "Illustrative QR Matrix & Registrar Block",
+      body: "Displays the structured Credential ID (CV-DEMO-2026-08491), illustrative authorization mark, and scannable verification matrix container for instant lookup.",
+    },
+  },
+  reverse: {
+    id: "reverse",
+    hudLabel: "Reference 03 — Reverse Security Backing",
+    cameraPos: new THREE.Vector3(0, 0.02, 4.45),
+    cameraTarget: new THREE.Vector3(0, 0, 0),
+    cardRot: { x: 0.03, y: Math.PI - 0.14 },
+    callout: {
+      tag: "Reverse Surface • Complete Physicality",
+      title: "Architectural Backing & Verification Notice",
+      body: "Finished reverse porcelain surface with guilloché security lattice, W3C VCDM 2.0 structural overview, and chamfered indigo optical rim trim.",
+    },
+  },
+};
 
 export class InteractionController {
-  private viewMode: ViewMode = "overview";
-  private currentT = 0; // 0 = Ref 01, 1 = Ref 03
-  private targetT = 0;
-
-  // Pointer & Drag state
+  private activePreset: PresetId = "full";
   private isDragging = false;
-  private previousPointerPos = { x: 0, y: 0 };
-  private userDragRot = { x: 0, y: 0 };
-  private targetUserDragRot = { x: 0, y: 0 };
-  private mouseParallax = { x: 0, y: 0 };
+  private pointerDownPos = { x: 0, y: 0 };
+  private lastPointerPos = { x: 0, y: 0 };
+  private dragDistance = 0;
 
-  private clock = new THREE.Clock();
+  public isHovered = false;
+  public targetHoverTiltX = 0;
+  public targetHoverTiltY = 0;
+  public targetElevationZ = 0;
+  public targetElevationY = 0;
+  public targetScale = 1.0;
+
+  public hoverParallax = { x: 0, y: 0 };
+  public targetUserRot = { x: 0, y: 0 };
+  public currentUserRot = { x: 0, y: 0 };
+
+  public currentCamPos: THREE.Vector3;
+  public currentCamTarget: THREE.Vector3;
+  public currentCardRot: { x: number; y: number };
+
+  private raycaster = new THREE.Raycaster();
+  private pointerNdc = new THREE.Vector2();
 
   constructor(
-    private camera: THREE.PerspectiveCamera,
-    private meshes: CredentialSceneMeshes,
-    private lightingRig: LightingRig,
     private domElement: HTMLElement,
-    resourceManager: ResourceManager
+    private viewportEl: HTMLElement,
+    private camera: THREE.PerspectiveCamera,
+    private hitZones: THREE.Mesh[],
+    private onPresetChange: (preset: ViewPreset) => void,
+    private onRequestSingleRender: () => void,
+    resourceManager: ResourceManager,
+    private credentialGroup?: THREE.Group
   ) {
-    this.setupEventListeners(resourceManager);
+    this.currentCamPos = VIEW_PRESETS.full.cameraPos.clone();
+    this.currentCamTarget = VIEW_PRESETS.full.cameraTarget.clone();
+    this.currentCardRot = { ...VIEW_PRESETS.full.cardRot };
+
+    this.bindEvents(resourceManager);
   }
 
-  private setupEventListeners(resourceManager: ResourceManager): void {
+  public getActivePreset(): PresetId {
+    return this.activePreset;
+  }
+
+  public setPreset(presetId: PresetId, resetUserOffset = true): void {
+    const preset = VIEW_PRESETS[presetId] || VIEW_PRESETS.full;
+    this.activePreset = preset.id;
+
+    if (resetUserOffset) {
+      this.targetUserRot.x = 0;
+      this.targetUserRot.y = 0;
+    }
+
+    this.onPresetChange(preset);
+  }
+
+  public resetAll(): void {
+    this.hoverParallax.x = 0;
+    this.hoverParallax.y = 0;
+    this.targetUserRot.x = 0;
+    this.targetUserRot.y = 0;
+    this.setPreset("full", true);
+  }
+
+  public snapToPreset(responsivePos: THREE.Vector3): void {
+    const preset = VIEW_PRESETS[this.activePreset];
+    this.currentCamPos.copy(responsivePos);
+    this.currentCamTarget.copy(preset.cameraTarget);
+    this.currentCardRot.x = preset.cardRot.x;
+    this.currentCardRot.y = preset.cardRot.y;
+    this.currentUserRot.x = this.targetUserRot.x;
+    this.currentUserRot.y = this.targetUserRot.y;
+  }
+
+  private bindEvents(resourceManager: ResourceManager): void {
+    const el = this.domElement;
+
     const onPointerDown = (e: PointerEvent) => {
-      // Only drag with primary mouse button or touch
       if (e.button !== 0 && e.pointerType === "mouse") return;
       this.isDragging = true;
-      this.previousPointerPos = { x: e.clientX, y: e.clientY };
+      this.dragDistance = 0;
+      this.pointerDownPos = { x: e.clientX, y: e.clientY };
+      this.lastPointerPos = { x: e.clientX, y: e.clientY };
       try {
-        this.domElement.setPointerCapture(e.pointerId);
+        el.setPointerCapture(e.pointerId);
       } catch {
-        // Fallback
+        // Safe ignore
       }
     };
 
     const onPointerMove = (e: PointerEvent) => {
-      // Mouse Parallax Calculation (Normalized -1 to +1)
-      const rect = this.domElement.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+
       const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
-      this.mouseParallax = {
-        x: Math.max(-1, Math.min(1, nx)),
-        y: Math.max(-1, Math.min(1, ny)),
-      };
 
-      if (!this.isDragging) return;
+      if (this.isDragging) {
+        const dx = e.clientX - this.lastPointerPos.x;
+        const dy = e.clientY - this.lastPointerPos.y;
+        this.lastPointerPos = { x: e.clientX, y: e.clientY };
+        this.dragDistance += Math.hypot(dx, dy);
 
-      const deltaX = e.clientX - this.previousPointerPos.x;
-      const deltaY = e.clientY - this.previousPointerPos.y;
-      this.previousPointerPos = { x: e.clientX, y: e.clientY };
+        // Controlled rotational sensitivity
+        const sensitivity = 0.0072;
+        this.targetUserRot.y += dx * sensitivity;
+        this.targetUserRot.x += dy * sensitivity;
 
-      const sensitivity = 0.005;
-      this.targetUserDragRot.y += deltaX * sensitivity;
-      this.targetUserDragRot.x += deltaY * sensitivity;
+        // Clamp vertical and horizontal tilt cleanly
+        const maxTiltX = 0.52;
+        const maxTiltY = Math.PI * 1.15;
+        this.targetUserRot.x = THREE.MathUtils.clamp(
+          this.targetUserRot.x,
+          -maxTiltX,
+          maxTiltX
+        );
+        this.targetUserRot.y = THREE.MathUtils.clamp(
+          this.targetUserRot.y,
+          -maxTiltY,
+          maxTiltY
+        );
 
-      // Strict clamps to prevent flipping or unnatural deformation
-      const maxPitch = this.viewMode === "overview" ? 0.32 : 0.22;
-      const maxYaw = this.viewMode === "overview" ? 0.65 : 0.35;
-      this.targetUserDragRot.x = Math.max(-maxPitch, Math.min(maxPitch, this.targetUserDragRot.x));
-      this.targetUserDragRot.y = Math.max(-maxYaw, Math.min(maxYaw, this.targetUserDragRot.y));
-    };
+        this.onRequestSingleRender();
+        return;
+      }
 
-    const onPointerUp = (e: PointerEvent) => {
-      this.isDragging = false;
-      try {
-        this.domElement.releasePointerCapture(e.pointerId);
-      } catch {
-        // Fallback
+      // Responsive pointer interaction when mouse is placed on or near the certificate
+      if (e.pointerType === "mouse") {
+        this.pointerNdc.set(nx, ny);
+        this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+
+        const targets = this.credentialGroup ? [this.credentialGroup] : this.hitZones;
+        const hits = this.raycaster.intersectObjects(targets, true);
+        const isDirectHit = hits.length > 0;
+
+        this.isHovered = true;
+
+        if (isDirectHit) {
+          // Direct hover over certificate: subtle, controlled 3D tilt with dignified optical reflection
+          this.targetHoverTiltY = THREE.MathUtils.clamp(nx * 0.16, -0.18, 0.18);
+          this.targetHoverTiltX = THREE.MathUtils.clamp(-ny * 0.12, -0.14, 0.14);
+          this.targetElevationZ = 0.05;
+          this.targetElevationY = 0.015;
+          this.targetScale = 1.0;
+          el.style.cursor = "grab";
+        } else {
+          // Ambient proximity: subtle optical alignment with cursor
+          const dist = Math.hypot(nx, ny);
+          const falloff = Math.max(0, 1 - dist * 0.5);
+          this.targetHoverTiltY = nx * 0.08 * falloff;
+          this.targetHoverTiltX = -ny * 0.06 * falloff;
+          this.targetElevationZ = 0;
+          this.targetElevationY = 0;
+          this.targetScale = 1.0;
+          el.style.cursor = "default";
+        }
+
+        this.hoverParallax.y = this.targetHoverTiltY;
+        this.hoverParallax.x = this.targetHoverTiltX;
       }
     };
 
-    const onPointerLeave = () => {
-      this.mouseParallax = { x: 0, y: 0 };
+    const onPointerUp = (e: PointerEvent) => {
+      if (!this.isDragging) return;
+      this.isDragging = false;
+      try {
+        el.releasePointerCapture(e.pointerId);
+      } catch {
+        // Safe ignore
+      }
     };
 
-    this.domElement.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    this.domElement.addEventListener("pointerleave", onPointerLeave);
+    const onPointerCancel = () => {
+      this.isDragging = false;
+      this.isHovered = false;
+      this.targetHoverTiltX = 0;
+      this.targetHoverTiltY = 0;
+      this.targetElevationZ = 0;
+      this.targetElevationY = 0;
+      this.targetScale = 1.0;
+      this.hoverParallax.x = 0;
+      this.hoverParallax.y = 0;
+    };
+
+    const onPointerLeave = () => {
+      this.isHovered = false;
+      this.targetHoverTiltX = 0;
+      this.targetHoverTiltY = 0;
+      this.targetElevationZ = 0;
+      this.targetElevationY = 0;
+      this.targetScale = 1.0;
+      this.hoverParallax.x = 0;
+      this.hoverParallax.y = 0;
+      if (!this.isDragging) {
+        el.style.cursor = "default";
+      }
+    };
+
+    const onLostPointerCapture = () => {
+      this.isDragging = false;
+    };
+
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerCancel);
+    el.addEventListener("pointerleave", onPointerLeave);
+    el.addEventListener("lostpointercapture", onLostPointerCapture);
 
     resourceManager.trackDisposable({
       dispose: () => {
-        this.domElement.removeEventListener("pointerdown", onPointerDown);
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        this.domElement.removeEventListener("pointerleave", onPointerLeave);
+        el.removeEventListener("pointerdown", onPointerDown);
+        el.removeEventListener("pointermove", onPointerMove);
+        el.removeEventListener("pointerup", onPointerUp);
+        el.removeEventListener("pointercancel", onPointerCancel);
+        el.removeEventListener("pointerleave", onPointerLeave);
+        el.removeEventListener("lostpointercapture", onLostPointerCapture);
       },
     });
-  }
-
-  public setMode(mode: ViewMode): void {
-    this.viewMode = mode;
-    this.targetT = mode === "closeup" ? 1.0 : 0.0;
-  }
-
-  public toggleMode(): ViewMode {
-    const nextMode: ViewMode = this.viewMode === "overview" ? "closeup" : "overview";
-    this.setMode(nextMode);
-    return nextMode;
-  }
-
-  public reset(): void {
-    this.setMode("overview");
-    this.targetUserDragRot = { x: 0, y: 0 };
-  }
-
-  public getMode(): ViewMode {
-    return this.viewMode;
-  }
-
-  public getTransitionProgress(): number {
-    return this.currentT;
-  }
-
-  public update(): void {
-    const elapsedTime = this.clock.getElapsedTime();
-    const lerpSpeed = 0.045;
-
-    // 1. Smoothly interpolate transition progress between Ref 01 (0) and Ref 03 (1)
-    this.currentT += (this.targetT - this.currentT) * lerpSpeed;
-    const t = this.currentT;
-
-    // 2. Smoothly damp user drag rotation
-    const dragLerp = 0.08;
-    this.userDragRot.x += (this.targetUserDragRot.x - this.userDragRot.x) * dragLerp;
-    this.userDragRot.y += (this.targetUserDragRot.y - this.userDragRot.y) * dragLerp;
-
-    // When not dragging, user rotation gently returns towards center (elastic spring)
-    if (!this.isDragging) {
-      this.targetUserDragRot.x *= 0.985;
-      this.targetUserDragRot.y *= 0.985;
-    }
-
-    // 3. Gentle Breathing Float (Calm in overview, stabilized in close-up)
-    const floatAmp = THREE.MathUtils.lerp(0.045, 0.015, t);
-    const floatSpeed = THREE.MathUtils.lerp(0.42, 0.25, t);
-    const floatY = Math.sin(elapsedTime * floatSpeed) * floatAmp;
-    const idleYaw = Math.sin(elapsedTime * 0.22) * 0.02 * (1 - t * 0.7);
-
-    // 4. Update Camera Position & LookAt
-    // Ref 01: (0, 0.12, 6.7) | Ref 03: (0.38, -0.38, 2.85)
-    const camTargetX = THREE.MathUtils.lerp(0, 0.38, t);
-    const camTargetY = THREE.MathUtils.lerp(0.12, -0.38, t);
-    const camTargetZ = THREE.MathUtils.lerp(6.7, 2.85, t);
-
-    this.camera.position.x += (camTargetX - this.camera.position.x) * lerpSpeed;
-    this.camera.position.y += (camTargetY - this.camera.position.y) * lerpSpeed;
-    this.camera.position.z += (camTargetZ - this.camera.position.z) * lerpSpeed;
-
-    const lookTargetX = THREE.MathUtils.lerp(0, 0.18, t);
-    const lookTargetY = THREE.MathUtils.lerp(-0.05, -0.42, t);
-    const lookTargetZ = THREE.MathUtils.lerp(0, 0.05, t);
-
-    const currentLookAt = new THREE.Vector3(lookTargetX, lookTargetY, lookTargetZ);
-    this.camera.lookAt(currentLookAt);
-
-    // 5. Update Card Group Position & Orientation
-    // Base Tilt: Ref 01 sits slightly tilted backward (-0.09 rad)
-    // Ref 03 rotates into an isometric oblique angle (-0.36, 0.30, -0.05)
-    const baseRotX = THREE.MathUtils.lerp(-0.09, -0.36, t);
-    const baseRotY = THREE.MathUtils.lerp(0, 0.30, t);
-    const baseRotZ = THREE.MathUtils.lerp(0, -0.05, t);
-
-    // Combine base rotation + drag + parallax + idle float
-    const finalRotX = baseRotX + this.userDragRot.x + this.mouseParallax.y * 0.025;
-    const finalRotY = baseRotY + this.userDragRot.y + this.mouseParallax.x * 0.035 + idleYaw;
-    const finalRotZ = baseRotZ;
-
-    this.meshes.cardGroup.rotation.x = finalRotX;
-    this.meshes.cardGroup.rotation.y = finalRotY;
-    this.meshes.cardGroup.rotation.z = finalRotZ;
-
-    const basePosY = THREE.MathUtils.lerp(0, -0.05, t) + floatY;
-    const basePosX = THREE.MathUtils.lerp(0, 0.05, t);
-    this.meshes.cardGroup.position.set(basePosX, basePosY, 0);
-
-    // 6. Update Flanking Trust Elements (Shield & Magnifier)
-    // Ref 01: Fully visible (scale 1.0)
-    // Ref 03: Fades and scales down smoothly (scale 0.0) so macro inspection focuses strictly on document
-    const flankingScale = THREE.MathUtils.lerp(1.0, 0.001, t);
-    this.meshes.shieldGroup.scale.setScalar(flankingScale);
-    this.meshes.magnifierGroup.scale.setScalar(flankingScale);
-
-    // Plinth and Backdrop fade gently in close-up
-    const envScale = THREE.MathUtils.lerp(1.0, 0.35, t);
-    this.meshes.plinthGroup.scale.set(envScale, 1.0, envScale);
-    this.meshes.backdropGroup.scale.setScalar(envScale);
-
-    // 7. Update Frosted Glass Security Overlay (Ref 03)
-    // In Ref 03, the frosted sheet and violet glowing edge illuminate dramatically!
-    const targetGlassOpacity = THREE.MathUtils.lerp(0.25, 0.72, t);
-    const targetEdgeOpacity = THREE.MathUtils.lerp(0.2, 0.95, t);
-
-    this.meshes.frostedGlassMat.opacity += (targetGlassOpacity - this.meshes.frostedGlassMat.opacity) * lerpSpeed;
-    this.meshes.frostedEdgeMat.opacity += (targetEdgeOpacity - this.meshes.frostedEdgeMat.opacity) * lerpSpeed;
-
-    // 8. Update Lighting Rig
-    this.lightingRig.update(t, lerpSpeed);
   }
 }

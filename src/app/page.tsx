@@ -9,8 +9,7 @@ import { FinalDarkScene } from "@/components/landing/FinalDarkScene";
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen bg-[#F4F4F6] selection:bg-brand-cobalt selection:text-white">
-      {/* Foreground Narrative Editorial Sections */}
+    <div className="relative min-h-screen bg-[#F8FAFC] selection:bg-[#0F1D38] selection:text-white">
       <main className="relative z-10">
         <HeroSection />
         <BrandTrustStrip />

@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
-    const ctx = extractTenantContext(request, slug);
+    const ctx = extractTenantContext(request, slug, "credentials:read");
 
     const batches = await BatchService.listBatches(slug, ctx.session);
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LANDING_CONTENT } from "@/config/landing-content";
 
@@ -9,38 +9,34 @@ export function FinalDarkScene() {
   const { finale } = LANDING_CONTENT;
 
   return (
-    <section id="finale" className="relative overflow-hidden bg-[#0A1224]/85 backdrop-blur-md py-24 sm:py-36 lg:py-44 text-white">
-      {/* Background ambient lighting wisps */}
-      <div className="pointer-events-none absolute left-1/4 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand-cobalt/15 blur-[120px]" />
-      <div className="pointer-events-none absolute right-1/4 top-1/2 h-[450px] w-[450px] -translate-y-1/2 translate-x-1/2 rounded-full bg-brand-violet/15 blur-[120px]" />
-
+    <section id="finale" className="relative overflow-hidden bg-[#0A1224] py-20 sm:py-28 lg:py-32 text-white">
       <div className="container relative mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="mx-auto max-w-4xl text-center">
+        <div className="mx-auto max-w-3xl text-center">
           {/* Eyebrow */}
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-indigo-200 backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <div className="inline-flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.05] px-3 py-1 text-xs font-medium text-slate-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
             <span>{finale.eyebrow}</span>
           </div>
 
-          {/* Inverted Hero Headline */}
-          <h2 className="mt-8 text-4xl font-extrabold tracking-[-0.04em] text-white sm:text-6xl lg:text-[4.75rem] lg:leading-[1.02]">
+          {/* Headline */}
+          <h2 className="mt-6 text-3xl font-semibold tracking-[-0.025em] text-white sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
             {finale.headlineLine1}
             <br />
-            <span className="text-white/35 font-bold">
+            <span className="text-slate-400 font-normal">
               {finale.headlineLine2}
             </span>
           </h2>
 
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-blue-100/70 sm:text-lg">
+          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-slate-300 sm:text-lg">
             {finale.description}
           </p>
 
           {/* Dual Action CTAs */}
-          <div className="mt-10 flex flex-col justify-center gap-4 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row sm:items-center">
             <Link href={finale.primaryCta.href}>
               <Button
                 size="lg"
-                className="h-13 rounded-2xl bg-white px-8 text-sm font-semibold text-brand-navy shadow-lg hover:bg-blue-50 transition-all hover:scale-[1.02]"
+                className="h-11 rounded-lg bg-white px-6 text-sm font-medium text-[#0A1224] shadow-none hover:bg-slate-100 transition-colors"
               >
                 {finale.primaryCta.label}
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -50,7 +46,7 @@ export function FinalDarkScene() {
               <Button
                 size="lg"
                 variant="outline"
-                className="h-13 rounded-2xl border-white/20 bg-white/5 px-8 text-sm font-semibold text-white hover:bg-white/10 transition-all hover:scale-[1.02]"
+                className="h-11 rounded-lg border-white/20 bg-transparent px-6 text-sm font-medium text-white hover:bg-white/[0.08] transition-colors shadow-none"
               >
                 {finale.secondaryCta.label}
               </Button>
@@ -58,15 +54,14 @@ export function FinalDarkScene() {
           </div>
 
           {/* Badges Strip */}
-          <div className="mt-16 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-2">
             {finale.badges.map((badge) => (
-              <div
+              <span
                 key={badge}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-blue-100/80"
+                className="rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[11px] text-slate-300"
               >
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-                <span>{badge}</span>
-              </div>
+                {badge}
+              </span>
             ))}
           </div>
         </div>

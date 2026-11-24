@@ -6,52 +6,52 @@ export function CredentialLifecycleSection() {
   const { lifecycle } = LANDING_CONTENT;
 
   return (
-    <section id="lifecycle" className="relative border-b border-black/8 bg-white/35 backdrop-blur-sm py-20 sm:py-28 lg:py-36">
+    <section id="lifecycle" className="relative border-b border-black/[0.08] bg-transparent py-20 sm:py-24 lg:py-28">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6">
         {/* Section Header */}
-        <div className="mx-auto max-w-3xl text-center rounded-3xl p-6 bg-white/50 backdrop-blur-md border border-black/5">
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.25em] text-brand-cobalt">
+        <div className="mx-auto max-w-2xl text-center">
+          <span className="text-xs font-medium uppercase tracking-[0.14em] text-[#64748B]">
             {lifecycle.eyebrow}
           </span>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-[-0.03em] text-[#0C0D12] sm:text-5xl lg:text-[3.5rem] lg:leading-[1.08]">
+          <h2 className="mt-4 text-3xl font-semibold tracking-[-0.025em] text-[#0F172A] sm:text-4xl lg:text-5xl lg:leading-[1.1]">
             {lifecycle.headlineLine1}
             <br />
-            <span className="text-black/30 font-bold">
+            <span className="text-[#64748B] font-normal">
               {lifecycle.headlineLine2}
             </span>
           </h2>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-[#4B5563]">
+          <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-[#475569]">
             {lifecycle.description}
           </p>
         </div>
 
-        {/* 6 Lifecycle Cards Grid with Translucent Glass */}
-        <div className="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {/* 6 Lifecycle Cards Grid */}
+        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {lifecycle.milestones.map((milestone) => (
             <div
               key={milestone.number}
-              className="group relative flex flex-col justify-between rounded-3xl border border-black/8 bg-white/80 p-7 backdrop-blur-md transition-all duration-300 hover:border-brand-cobalt/40 hover:bg-white hover:shadow-md hover:-translate-y-1"
+              className="relative flex flex-col justify-between rounded-xl border border-black/[0.08] bg-white p-6 shadow-sm transition-colors hover:border-black/20"
             >
               <div>
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-brand-navy/40 group-hover:text-brand-cobalt transition-colors">
-                    PHASE {milestone.number}
+                  <span className="font-mono text-xs font-medium text-[#64748B]">
+                    Phase {milestone.number}
                   </span>
-                  <span className="rounded-full bg-brand-navy/5 px-2.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider text-brand-navy">
+                  <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-medium text-[#475569]">
                     {milestone.phase}
                   </span>
                 </div>
 
-                <h3 className="mt-5 text-lg font-bold text-[#0F1D38]">
+                <h3 className="mt-4 text-base font-semibold text-[#0F172A]">
                   {milestone.title}
                 </h3>
-                <p className="mt-2 text-xs leading-relaxed text-[#6B7280]">
+                <p className="mt-2 text-xs leading-relaxed text-[#475569]">
                   {milestone.description}
                 </p>
               </div>
 
-              <div className="mt-6 border-t border-black/5 pt-4">
-                <span className="font-mono text-[10px] font-semibold text-indigo-600">
+              <div className="mt-5 border-t border-black/[0.06] pt-3.5">
+                <span className="font-mono text-[11px] font-medium text-[#64748B]">
                   {milestone.standard}
                 </span>
               </div>

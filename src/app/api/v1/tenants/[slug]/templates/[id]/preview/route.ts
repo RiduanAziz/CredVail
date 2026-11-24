@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { extractTenantContext } from "@/lib/auth/tenant-context";
 import { TemplateService } from "@/lib/services/template-service";
+import { checkApiRateLimit, createRateLimitResponse, getClientIp } from "@/lib/services/api-rate-limiter";
 
 const templateService = new TemplateService();
 
@@ -11,6 +12,18 @@ export async function POST(
   try {
     const { slug, id } = await params;
     const ctx = extractTenantContext(request, slug);
+
+    // Rate limit vector previews
+    const clientIp = getClientIp(request);
+    const rateLimit = await checkApiRateLimit({
+      identifier: `${clientIp}:${slug}`,
+      scope: "templates:preview",
+      maxAttempts: 60,
+      windowSeconds: 60,
+    });
+    if (!rateLimit.allowed) {
+      return createRateLimitResponse(rateLimit.retryAfter || 60);
+    }
 
     const isPdfFormat =
       request.nextUrl.searchParams.get("format") === "pdf" ||

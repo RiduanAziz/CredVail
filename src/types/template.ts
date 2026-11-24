@@ -88,6 +88,8 @@ export interface TemplateLayoutConfig {
   customVariables?: string[];
 }
 
+export type TemplateStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
 export interface CertificateTemplateRecord {
   id: string;
   tenantId: string;
@@ -99,6 +101,9 @@ export interface CertificateTemplateRecord {
   layoutConfig: TemplateLayoutConfig;
   backgroundImageUrl: string | null;
   isDefault: boolean;
+  version?: number;
+  status?: TemplateStatus;
+  isArchived?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

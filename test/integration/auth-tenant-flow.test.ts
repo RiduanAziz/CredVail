@@ -124,8 +124,16 @@ describe("End-to-End Authentication and Multi-Tenancy Flow", () => {
 
     expect(bobMember.userId).toBe(bobRegistration.user.id);
     expect(bobMember.role).toBe("TEMPLATE_DESIGNER");
+    expect(bobMember.invitationToken).toBeDefined();
 
-    // 10. Bob logs in and verifies his membership in Apex Institute
+    // 10. Bob accepts the staff invitation
+    await tenantService.acceptInvitation(
+      "apex-tech",
+      bobMember.invitationToken!,
+      bobRegistration.user.id
+    );
+
+    // 11. Bob logs in and verifies his membership in Apex Institute
     const bobLogin = await authService.login({
       email: "bob@apex.edu",
       password: "BobPasswordSecure!2026",

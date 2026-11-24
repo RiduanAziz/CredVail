@@ -193,6 +193,10 @@ export class BatchService {
       throw new Error(`Template with ID "${input.templateId}" does not exist.`);
     }
 
+    if (template.isArchived) {
+      throw new Error(`Cannot stage batch: Template "${template.title}" is archived and cannot be used for new issuance.`);
+    }
+
     const validRecipients = input.stagedRecipients.filter((r) => r.status === "VALID");
     if (validRecipients.length === 0) {
       throw new Error("Cannot stage batch: No valid recipient records provided.");
@@ -201,6 +205,8 @@ export class BatchService {
     const batch = await BatchRepository.createBatch({
       tenantId: tenant.id,
       templateId: input.templateId,
+      templateVersion: template.version || 1,
+      templateSnapshot: template,
       title: input.title,
       stagedRecipients: input.stagedRecipients as StagedRecipientData[],
     });
