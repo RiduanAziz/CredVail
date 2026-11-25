@@ -5,9 +5,10 @@
 **Priority:** P0 — Critical  
 **Local Workspace:** `F:\CredVail`  
 **Git Baseline Commit:** `60447a1e36512134e85910e63892b430ab9b4cac` on branch `main`  
-**Evaluation Date:** 2026-11-24  
+**Evaluation Date:** 2026-11-24 (Reconciled 2026-11-25 under `CRV-SEC-01.2`)  
 **Auditor / Security Architect:** Principal Application Security Auditor & Cryptographic Systems Engineer  
-**Mandatory Final Decision:** **`BLOCKED`**  
+**Original CRV-SEC-01.1 Decision:** **`BLOCKED`** *(No reachable PostgreSQL daemon)*  
+**Updated Status (`CRV-SEC-01.2`):** **`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED`** *(Technical migration, transactional rollback, cryptographic signing, and 54/54 live PostgreSQL 16.16 integration tests PASSED on disposable DB; target deployment DB inventory AC-14 remains pending authorized operator execution)*  
 
 ---
 
@@ -193,8 +194,7 @@ While all code modifications, cryptographic isolation, Next.js server startup va
 
 ---
 
-### Single Recommended Next Action
+### Single Recommended Next Action *(Updated under CRV-SEC-01.2)*
 
-Do not proceed to `CRV-SEC-02`. 
-
-**Action:** Enable a local PostgreSQL instance (via Docker or local Windows service) or execute the migration dry run (`scripts/migrate-issuer-keys.mjs`) in a staging/CI environment containing active PostgreSQL to inspect the live `issuer_keys` table count and verify live ciphertext recoverability. Once live database verification succeeds, promote CRV-SEC-01 to `PRODUCTION READY`.
+1. **Technical Verification Resolved (`CRV-SEC-01.2`):** An isolated disposable **PostgreSQL 16.16** environment verified all 15 migration scenarios (`MIG-01`–`MIG-15`), Phase F cryptographic sign-and-verify fidelity, `54/54` live PostgreSQL integration tests (`REQUIRE_POSTGRES_INTEGRATION=true`), and fixed preflight `.env` leak & Serializable CAS defects in `scripts/migrate-issuer-keys.mjs` (see [CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md](file:///F:/CredVail/docs/reports/security/CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md)).
+2. **Remaining Deployment Gate (`AC-14`):** An authorized operator with production/staging access must execute the read-only inventory SQL and dry run in [KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md](file:///F:/CredVail/docs/runbooks/KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md) against the actual target deployment database before promoting target deployment readiness to `PASS — TECHNICAL AND OPERATIONAL ACCEPTANCE`.

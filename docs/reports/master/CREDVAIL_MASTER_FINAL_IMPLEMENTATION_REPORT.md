@@ -5,9 +5,9 @@
 **Category:** Multi-Tenant Digital Credential Infrastructure SaaS  
 **Local Workspace:** `F:\CredVail`  
 **GitHub Repository:** `https://github.com/RiduanAziz/CredVail`  
-**Baseline Commit:** `60447a1e36512134e85910e63892b430ab9b4cac`  
+**Baseline Commit:** `67162e52bccac5bf8caf0c41d63e9cbc61fa47e8` *(Updated from prior `60447a1e36512134e85910e63892b430ab9b4cac`)*  
 **Audit & Delivery Date:** 2026-11-25  
-**Final Status:** **ALL 15 PHASES COMPLETE, VERIFIED & PRODUCTION READY**
+**Reconciled Status (`CRV-SEC-01.2`):** **TECHNICAL IMPLEMENTATION COMPLETE (`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED` for legacy KMS deployment migration gate `AC-14`)**
 
 ---
 
@@ -17,14 +17,16 @@ In accordance with the Master Software Engineering Implementation Plan and Produ
 
 Every security vulnerability identified during the baseline audit has been completely eliminated with fail-closed security architecture. Every functional phase from multi-tenant database persistence to blockchain anchoring and client wallet custody has been implemented, validated against W3C and cryptographic standards, and proven with 100% test pass rates across 382 automated unit tests.
 
-### 1.1 Master Engineering Metrics
-- **Total Test Suites Executed:** 44 Test Files
-- **Total Automated Unit Tests:** 382 Tests
-- **Test Pass Rate:** 100% (382 Passed, 0 Failed, 0 Flaky)
-- **TypeScript Compilation (`tsc --noEmit`):** 0 Errors (Strict Type Safety)
-- **Next.js Production Build:** Successful (24 Static Pages, 42 Dynamic API Routes)
-- **Security Invariant Violations Remaining:** 0
-- **Workspace State:** All pre-existing user modifications (Three.js VFX-02 interactive experience, landing page redesign, and custom models) strictly preserved and uncommitted.
+### 1.1 Master Engineering Metrics *(Reconciled 2026-11-25)*
+- **Unit Test Suites Executed (`npx vitest run test/unit`):** 45 Test Files, 389 / 389 Tests Passing (0 Failed)
+- **Live PostgreSQL Integration Suites (`REQUIRE_POSTGRES_INTEGRATION=true` on disposable PG 16.16):** 5 Test Files, 54 / 54 Tests Passing (0 Skipped, 0 Failed)
+- **Non-PG Integration Suites:** 11 Test Files, 19 / 19 Tests Passing
+- **TypeScript Compilation (`npx tsc --noEmit`):** 0 Errors
+- **Next.js Production Build (`npm run build`):** Exit Code 0 (`Generating static pages (24/24)`)
+- **Known Environment / Deployment Gates:**
+  - `AC-14` (`Target deployment database IssuerKey inventory & authorized dry-run`): **PENDING OPERATOR EXECUTION** (`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED`). See [CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md](file:///F:/CredVail/docs/reports/security/CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md).
+  - `npm run lint`: ESLint is not pre-configured in repository (`next lint` prompts interactively).
+  - Legacy `npm test` (`scripts/verify-phase-*.mjs`): Pre-existing `src/lib/db/persistence-policy.ts:13` uses TypeScript parameter-property syntax incompatible with plain Node 24 strip-only execution.
 
 ---
 
@@ -35,11 +37,11 @@ Every security vulnerability identified during the baseline audit has been compl
 - **Artifact:** `docs/MASTER_ROADMAP.md` & `docs/reports/master/CREDVAIL_MASTER_IMPLEMENTATION_PLAN_ADOPTION_AUDIT.md`.
 - **Status:** **ACCEPTED**
 
-### Phase 2: Production Secrets & KMS Master Key Isolation (`CRV-SEC-01`)
-- **Objective:** Cryptographically isolated institutional private-key encryption (`KMS_MASTER_KEY`) from web-session signing (`SESSION_SECRET`).
-- **Remediation:** Enforced strict 32-byte Base64 KMS master key decoding with HKDF-SHA-256 domain derivation (`credvail-issuer-key-encryption-v1`). Eliminated silent fallback to session secrets or development defaults. Fails closed on production startup if missing or malformed.
-- **Artifact:** `docs/reports/security/CRV_SEC_01_KMS_SECURITY_ACCEPTANCE_REPORT.md`.
-- **Status:** **ACCEPTED**
+### Phase 2: Production Secrets & KMS Master Key Isolation (`CRV-SEC-01` / `CRV-SEC-01.1` / `CRV-SEC-01.2`)
+- **Objective:** Cryptographically isolated institutional private-key encryption (`KMS_MASTER_KEY`) from web-session signing (`SESSION_SECRET`), and verified legacy issuer-key migration against PostgreSQL 16.16.
+- **Remediation:** Enforced strict 32-byte Base64 KMS master key decoding with HKDF-SHA-256 domain derivation (`credvail_issuer_private_key_encryption_v1`). Eliminated silent fallback to session secrets or development defaults. Fails closed on production startup if missing or malformed. Under `CRV-SEC-01.2`, remediated silent `.env` secret override, preflight validation gaps, and Serializable CAS transaction safety in `scripts/migrate-issuer-keys.mjs`, verified all `MIG-01..MIG-15` scenarios and Phase F cryptographic integrity on disposable PostgreSQL 16.16, and documented [KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md](file:///F:/CredVail/docs/runbooks/KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md).
+- **Artifacts:** `docs/reports/security/CRV-SEC-01_KMS_MASTER_KEY_ISOLATION_REPORT.md`, `docs/reports/security/CRV-SEC-01_FINAL_ACCEPTANCE_REPORT.md`, and `docs/reports/security/CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md`.
+- **Status:** **`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED`** *(Technical & disposable PG 16.16 verification `AC-01`–`AC-13` PASSED; target deployment DB inventory `AC-14` pending authorized operator run)*
 
 ### Phase 3: Production Database Persistence & Failure Handling (`CRV-SEC-02`)
 - **Objective:** Hardened dual-mode persistence across `UserRepository`, `TenantRepository`, `TemplateRepository`, `BatchRepository`, `CredentialRepository`, and `KeyRepository`.
@@ -138,6 +140,6 @@ Every security vulnerability identified during the baseline audit has been compl
 
 ---
 
-## 4. Verification Checkpoint & Sign-Off
+## 4. Verification Checkpoint & Sign-Off *(Reconciled under CRV-SEC-01.2)*
 
-The CREDVAIL platform is completely verified, cryptographically isolated, and structurally complete. All 15 phases have achieved 100% acceptance criteria without skipping or compromising any architectural requirement.
+Technical implementation and automated unit/live PostgreSQL integration verification across the CREDVAIL application modules are passing on the disposable test environment (`AC-01`–`AC-13` verified for KMS isolation & migration). Production deployment readiness for existing environments with persisted `IssuerKey` records remains **`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED`** until an authorized deployment operator establishes the actual target database inventory (`AC-14`) and dry-run result per [`docs/runbooks/KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md`](file:///F:/CredVail/docs/runbooks/KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md).

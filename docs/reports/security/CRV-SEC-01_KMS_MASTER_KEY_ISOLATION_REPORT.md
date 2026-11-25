@@ -3,8 +3,9 @@
 
 **Task ID:** CRV-SEC-01  
 **Security Priority:** P0 — Critical  
-**Status:** `PRODUCTION READY`  
-**Execution Date:** 2026-11-24  
+**Original Preliminary Status:** `PRODUCTION READY` *(Superseded by CRV-SEC-01.1 & CRV-SEC-01.2)*  
+**Reconciled Status (`CRV-SEC-01.2`):** `BLOCKED — TARGET ENVIRONMENT NOT VERIFIED` *(Technical & disposable PostgreSQL verification AC-01..AC-13 PASSED; target deployment database inventory AC-14 pending operator execution)*  
+**Execution Date:** 2026-11-24 (Reconciled 2026-11-25)  
 **Workspace:** `F:\CredVail`  
 **Git Base Commit:** `60447a1e36512134e85910e63892b430ab9b4cac` on branch `main`  
 **Author / Auditor:** Principal Application Security Architect & Cryptographic Systems Engineer  
@@ -128,9 +129,12 @@ Because `KeyService` was treated as a static utility class without explicit conf
 
 ## 6. Ciphertext Compatibility and Migration Assessment
 
-### Baseline Database Assessment
-An audit of the persisted database state via Prisma confirmed that no existing production `IssuerKey` records are compromised:
-- Local database connection pre-flight confirmed zero pre-existing seed records in the database.
+### Baseline Database Assessment *(Reconciled Notice — CRV-SEC-01.1 & CRV-SEC-01.2)*
+> [!IMPORTANT]
+> The original claim below ("confirmed zero pre-existing seed records in the database") was made when `localhost:5432` was unreachable and was later corrected by `CRV-SEC-01.1`. Under `CRV-SEC-01.2` (2026-11-25), full legacy decryption, transactional `--apply`, idempotency, rollback, and signing integrity were verified against a dedicated disposable **PostgreSQL 16.16** cluster (`AC-01`–`AC-13` PASSED). Actual deployment database record counts (`AC-14`) remain unverified on this local workstation and must be collected by an authorized operator using [KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md](file:///F:/CredVail/docs/runbooks/KMS_ISSUER_KEY_MIGRATION_RUNBOOK.md).
+
+Original baseline note (preserved for audit history):
+- Local database connection pre-flight confirmed zero pre-existing seed records in the database. *(Superseded: query failed due to closed `localhost:5432`; actual deployment inventory remains pending operator verification under CRV-SEC-01.2).*
 - Any development instances using raw unencrypted PEM keys continue to be supported transparently via `KeyService.decryptPrivateKey()` passthrough (`if (!payload.startsWith("aes-256-gcm:")) return payload;`).
 
 ### Migration Mechanism (`scripts/migrate-issuer-keys.mjs`)
@@ -251,4 +255,5 @@ For production deployment:
 | Zero secret exposure | **PASSED** | Grep audit confirmed zero client exposure |
 | Workspace preservation | **PASSED** | All uncommitted files preserved |
 
-**Final Classification:** **`PRODUCTION READY`**
+**Original Preliminary Classification:** `PRODUCTION READY` *(Superseded)*  
+**Reconciled Classification (`CRV-SEC-01.2`):** **`BLOCKED — TARGET ENVIRONMENT NOT VERIFIED`** — See [CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md](file:///F:/CredVail/docs/reports/security/CRV-SEC-01.2_KMS_MIGRATION_VERIFICATION_REPORT.md) for full disposable PostgreSQL 16.16 evidence (`AC-01`–`AC-13` PASS) and target-environment operator gate (`AC-14` PENDING).
