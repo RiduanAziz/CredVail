@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { AuthService } from "@/lib/services/auth-service";
 import { TenantService } from "@/lib/services/tenant-service";
 import { UserRepository, inMemoryUserStore } from "@/lib/repositories/user-repository";
+import { EmailVerificationRepository } from "@/lib/repositories/email-verification-repository";
 import { TenantRepository, inMemoryTenantStore } from "@/lib/repositories/tenant-repository";
 import { verifySessionToken } from "@/lib/auth/session";
 
@@ -27,6 +28,7 @@ describe("Phase 3 End-to-End Dashboard, Branding, and Analytics Flow", () => {
       password: "QuantumDeanPassword!2026",
       fullName: "Dean John Preskill",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(deanReg.verificationToken);
 
     const qciTenant = await tenantService.createOrganization(
       {
@@ -135,6 +137,7 @@ describe("Phase 3 End-to-End Dashboard, Branding, and Analytics Flow", () => {
       password: "EveCompetitorPassword!2026",
       fullName: "Eve Hacker",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(eveReg.verificationToken);
     const compTenant = await tenantService.createOrganization(
       {
         name: "Competitor Lab",

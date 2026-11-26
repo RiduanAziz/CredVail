@@ -26,7 +26,18 @@ export async function POST(
     }
 
     const baseUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-    const result = await BatchProcessingService.processBatch(slug, id, ctx.session, baseUrl);
+    const headerKey = request.headers.get("idempotency-key")?.trim();
+    const body = await request.json().catch(() => ({}));
+    const idempotencyKey =
+      headerKey || (typeof body?.idempotencyKey === "string" ? body.idempotencyKey.trim() : undefined);
+
+    const result = await BatchProcessingService.processBatch(
+      slug,
+      id,
+      ctx.session,
+      baseUrl,
+      idempotencyKey ? { idempotencyKey } : undefined
+    );
 
     return NextResponse.json({
       success: true,

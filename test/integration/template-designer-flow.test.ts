@@ -3,6 +3,7 @@ import { AuthService } from "@/lib/services/auth-service";
 import { TenantService } from "@/lib/services/tenant-service";
 import { TemplateService } from "@/lib/services/template-service";
 import { UserRepository, inMemoryUserStore } from "@/lib/repositories/user-repository";
+import { EmailVerificationRepository } from "@/lib/repositories/email-verification-repository";
 import { TenantRepository, inMemoryTenantStore } from "@/lib/repositories/tenant-repository";
 import { TemplateRepository, inMemoryTemplateStore } from "@/lib/repositories/template-repository";
 import { verifySessionToken } from "@/lib/auth/session";
@@ -35,6 +36,7 @@ describe("Phase 4 End-to-End Certificate Template Designer Flow", () => {
       password: "ImperialDeanPassword!2026",
       fullName: "Prof. Elena Rostova",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(elenaReg.verificationToken);
 
     const imperialTenant = await tenantService.createOrganization(
       {
@@ -59,6 +61,7 @@ describe("Phase 4 End-to-End Certificate Template Designer Flow", () => {
       password: "BobDesignerPassword!2026",
       fullName: "Bob Canvas",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(bobReg.verificationToken);
 
     const bobInvite = await tenantService.inviteMember(
       "imperial",
@@ -162,6 +165,7 @@ describe("Phase 4 End-to-End Certificate Template Designer Flow", () => {
       password: "EveOutsiderPassword!2026",
       fullName: "Eve Outsider",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(eveReg.verificationToken);
     const outsiderTenant = await tenantService.createOrganization(
       {
         name: "Outsider Lab",

@@ -102,7 +102,7 @@ export default function TenantSettingsPage({
       setTenant(t);
       setName(t.name);
       setLegalEntityName(t.legalEntityName);
-      setWebsiteUrl(t.websiteUrl);
+      setWebsiteUrl(t.websiteUrl || "");
       setLogoUrl(t.logoUrl || "");
 
       const branding = (t.brandingConfig as any) || {};
@@ -163,7 +163,7 @@ export default function TenantSettingsPage({
         body: JSON.stringify({
           name,
           legalEntityName,
-          websiteUrl,
+          websiteUrl: websiteUrl.trim() || null,
           logoUrl: logoUrl || null,
           brandingConfig: {
             primaryColor,
@@ -206,13 +206,13 @@ export default function TenantSettingsPage({
   return (
     <div className="space-y-8 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-black/[0.08] pb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
+            <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A]">
               Organization Settings & Branding
             </h1>
-            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+            <Badge variant="outline" className="border-black/[0.08] bg-white text-[#475569] font-mono text-[11px] gap-1.5">
               <Sparkles className="h-3 w-3" />
               Tenant Governance
             </Badge>
@@ -329,13 +329,69 @@ export default function TenantSettingsPage({
                     <Input
                       id="websiteUrl"
                       type="url"
+                      placeholder="https://institution.edu"
                       value={websiteUrl}
                       onChange={(e) => setWebsiteUrl(e.target.value)}
                       className="pl-9 text-xs"
-                      required
                     />
                   </div>
                 </div>
+
+                {tenant && (tenant.organizationType || tenant.countryCode || tenant.registrationNumber || tenant.addressLine1 || tenant.contactPhone) && (
+                  <div className="rounded-lg border border-border/70 bg-muted/20 p-4 space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Registered Institutional Classification & Location
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                      {tenant.organizationType && (
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Institution Type</span>
+                          <span className="font-medium text-foreground">
+                            {tenant.organizationType === "OTHER" && tenant.organizationTypeOther
+                              ? tenant.organizationTypeOther
+                              : tenant.organizationType.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                      )}
+                      {tenant.countryCode && (
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Country</span>
+                          <span className="font-medium text-foreground font-mono">{tenant.countryCode}</span>
+                        </div>
+                      )}
+                      {tenant.registrationNumber && (
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Registration / Accreditation ID</span>
+                          <span className="font-medium text-foreground font-mono">{tenant.registrationNumber}</span>
+                        </div>
+                      )}
+                      {tenant.registrationAuthority && (
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Accompanying Authority</span>
+                          <span className="font-medium text-foreground">{tenant.registrationAuthority}</span>
+                        </div>
+                      )}
+                      {(tenant.addressLine1 || tenant.city || tenant.postalCode) && (
+                        <div className="sm:col-span-2">
+                          <span className="text-muted-foreground block text-[10px]">Registered Address</span>
+                          <span className="font-medium text-foreground">
+                            {[tenant.addressLine1, tenant.addressLine2, tenant.city, tenant.region, tenant.postalCode]
+                              .filter(Boolean)
+                              .join(", ")}
+                          </span>
+                        </div>
+                      )}
+                      {(tenant.contactPhone || tenant.adminContactPosition) && (
+                        <div>
+                          <span className="text-muted-foreground block text-[10px]">Admin / Office Contact</span>
+                          <span className="font-medium text-foreground">
+                            {[tenant.adminContactPosition, tenant.contactPhone].filter(Boolean).join(" · ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground" htmlFor="logoUrl">

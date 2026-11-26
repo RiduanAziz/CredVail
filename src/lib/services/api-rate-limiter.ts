@@ -18,6 +18,10 @@ export interface RateLimitOptions {
 export const RATE_LIMIT_PROFILES = {
   AUTH_LOGIN: { scope: "auth:login", maxAttempts: 5, windowSeconds: 60 },
   AUTH_REGISTER: { scope: "auth:register", maxAttempts: 5, windowSeconds: 60 },
+  AUTH_REGISTER_INSTITUTION: { scope: "auth:register:institution", maxAttempts: 5, windowSeconds: 60 },
+  AUTH_REGISTER_WALLET: { scope: "auth:register:wallet", maxAttempts: 5, windowSeconds: 60 },
+  AUTH_VERIFY_EMAIL: { scope: "auth:verify-email", maxAttempts: 10, windowSeconds: 60 },
+  AUTH_RESEND_VERIFICATION: { scope: "auth:resend-verification", maxAttempts: 3, windowSeconds: 60 },
   VERIFY_LOOKUP: { scope: "verify:lookup", maxAttempts: 60, windowSeconds: 60 },
   VERIFY_PRESENTATION: { scope: "verify:presentation", maxAttempts: 30, windowSeconds: 60 },
   VERIFY_CHALLENGE: { scope: "verify:challenge", maxAttempts: 30, windowSeconds: 60 },

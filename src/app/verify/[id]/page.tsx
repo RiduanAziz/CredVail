@@ -98,7 +98,7 @@ export default function PublicVerifyPage({
             </div>
           </div>
           <div className="space-y-2">
-            <h2 className="text-xl font-bold font-serif text-foreground">
+            <h2 className="text-xl font-semibold tracking-[-0.025em] text-[#0F172A]">
               Executing 5-Layer Cryptographic Verification...
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -123,7 +123,7 @@ export default function PublicVerifyPage({
             <div className="w-14 h-14 mx-auto rounded-full bg-destructive/10 flex items-center justify-center text-destructive mb-3">
               <XCircle className="w-8 h-8" />
             </div>
-            <CardTitle className="text-xl font-serif">Verification Failed</CardTitle>
+            <CardTitle className="text-xl font-semibold tracking-[-0.02em] text-[#0F172A]">Verification Failed</CardTitle>
             <CardDescription className="text-sm">{error || "Credential could not be located."}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-center">
@@ -196,7 +196,7 @@ export default function PublicVerifyPage({
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold font-serif tracking-tight">
+                  <h1 className="text-2xl font-semibold tracking-[-0.025em]">
                     {status === "VALID" && "Cryptographically Verified"}
                     {status === "REVOKED" && "Credential Revoked"}
                     {status === "COMPROMISED" && "Issuer Key Compromised"}
@@ -252,7 +252,7 @@ export default function PublicVerifyPage({
                 <CardDescription className="text-xs uppercase tracking-wider font-semibold text-primary">
                   Official Educational Credential
                 </CardDescription>
-                <CardTitle className="text-2xl font-serif font-bold text-foreground">
+                <CardTitle className="text-2xl font-semibold tracking-[-0.025em] text-[#0F172A]">
                   {credential.courseName}
                 </CardTitle>
               </div>

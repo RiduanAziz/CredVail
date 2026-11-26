@@ -6,11 +6,12 @@ import { assertTenantPermission } from "@/lib/auth/rbac";
 import { SessionPayload } from "@/lib/auth/session";
 import { AuthorizationError } from "@/lib/auth/tenant-context";
 import { TenantRole, TenantAnalyticsOverview, AuditLogEntry } from "@/types";
+import { optionalPhoneSchema, optionalWebsiteSchema, ORGANIZATION_TYPE_VALUES } from "@/lib/validation/registration";
 
 export const createTenantSchema = z.object({
   name: z.string().min(2, "Institution name must be at least 2 characters long"),
   legalEntityName: z.string().min(2, "Legal entity name is required"),
-  websiteUrl: z.string().url("Must be a valid website URL"),
+  websiteUrl: z.string().url("Must be a valid website URL").optional().nullable(),
   slug: z
     .string()
     .min(3, "Slug must be at least 3 characters long")
@@ -24,7 +25,19 @@ export const createTenantSchema = z.object({
 export const updateTenantSchema = z.object({
   name: z.string().min(2, "Institution name must be at least 2 characters long").optional(),
   legalEntityName: z.string().min(2, "Legal entity name is required").optional(),
-  websiteUrl: z.string().url("Must be a valid website URL").optional(),
+  websiteUrl: optionalWebsiteSchema.optional(),
+  organizationType: z.enum(ORGANIZATION_TYPE_VALUES).optional().nullable(),
+  organizationTypeOther: z.string().trim().max(120).optional().nullable(),
+  countryCode: z.string().trim().min(2).max(2).toUpperCase().optional().nullable(),
+  registrationNumber: z.string().trim().max(120).optional().nullable(),
+  registrationAuthority: z.string().trim().max(180).optional().nullable(),
+  addressLine1: z.string().trim().max(200).optional().nullable(),
+  addressLine2: z.string().trim().max(200).optional().nullable(),
+  city: z.string().trim().max(100).optional().nullable(),
+  region: z.string().trim().max(100).optional().nullable(),
+  postalCode: z.string().trim().max(32).optional().nullable(),
+  contactPhone: optionalPhoneSchema.optional(),
+  adminContactPosition: z.string().trim().max(120).optional().nullable(),
   logoUrl: z.string().url("Must be a valid URL").nullable().optional(),
   verificationStatus: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "SUSPENDED"] as const).optional(),
   brandingConfig: z
@@ -96,7 +109,7 @@ export class TenantService {
       slug,
       name: validated.name,
       legalEntityName: validated.legalEntityName,
-      websiteUrl: validated.websiteUrl,
+      websiteUrl: validated.websiteUrl ?? null,
       didUri,
       logoUrl: validated.logoUrl,
       brandingConfig: validated.brandingConfig || {},
@@ -360,6 +373,56 @@ export class TenantService {
   }
 
   /**
+   * Atomically transfers Organization Owner authority to an accepted staff member.
+   */
+  async transferOwnership(
+    slug: string,
+    targetUserId: string,
+    session: SessionPayload
+  ): Promise<boolean> {
+    const tenant = await this.tenantRepo.findBySlug(slug);
+    if (!tenant) throw new Error(`Tenant '${slug}' not found`);
+
+    const callerMembership = session.tenants.find((t) => t.slug === slug || t.tenantId === tenant.id);
+    if (callerMembership?.role !== "ORG_OWNER" && session.platformRole !== "SUPER_ADMIN") {
+      throw new AuthorizationError("Only Organization Owners or Platform Administrators can transfer ownership");
+    }
+
+    const members = await this.tenantRepo.listMembers(tenant.id);
+    const targetMember = members.find((m) => m.userId === targetUserId);
+    if (!targetMember) {
+      throw new Error("Target user is not a member of this organization");
+    }
+    if (!targetMember.acceptedAt) {
+      throw new Error("Cannot transfer ownership to a member with a pending unaccepted invitation");
+    }
+    if (targetMember.role === "ORG_OWNER") {
+      throw new Error("Target user is already an Organization Owner");
+    }
+
+    const transferred = await this.tenantRepo.transferOwnership(tenant.id, session.sub, targetUserId);
+    if (!transferred) {
+      throw new Error("Unable to complete ownership transfer");
+    }
+
+    await this.tenantRepo.recordAuditLog({
+      tenantId: tenant.id,
+      userId: session.sub,
+      userEmail: session.email,
+      action: "OWNERSHIP_TRANSFERRED",
+      resourceType: "Tenant",
+      resourceId: tenant.id,
+      metadata: {
+        fromUserId: session.sub,
+        toUserId: targetUserId,
+        previousTargetRole: targetMember.role,
+      },
+    });
+
+    return true;
+  }
+
+  /**
    * Updates organization metadata and branding configuration.
    */
   async updateOrganization(
@@ -380,6 +443,18 @@ export class TenantService {
       name: validated.name,
       legalEntityName: validated.legalEntityName,
       websiteUrl: validated.websiteUrl,
+      organizationType: validated.organizationType,
+      organizationTypeOther: validated.organizationTypeOther,
+      countryCode: validated.countryCode,
+      registrationNumber: validated.registrationNumber,
+      registrationAuthority: validated.registrationAuthority,
+      addressLine1: validated.addressLine1,
+      addressLine2: validated.addressLine2,
+      city: validated.city,
+      region: validated.region,
+      postalCode: validated.postalCode,
+      contactPhone: validated.contactPhone,
+      adminContactPosition: validated.adminContactPosition,
       logoUrl: validated.logoUrl,
       brandingConfig: validated.brandingConfig,
       verificationStatus: validated.verificationStatus,

@@ -8,14 +8,14 @@
 
 export class DatabasePersistenceError extends Error {
   public readonly code = "DATABASE_PERSISTENCE_FAILURE";
+  public readonly operation: string;
+  public readonly cause?: unknown;
 
-  constructor(
-    public readonly operation: string,
-    message: string,
-    public readonly cause?: unknown
-  ) {
+  constructor(operation: string, message: string, cause?: unknown) {
     super(`[DatabasePersistenceError] ${operation}: ${message}`);
     this.name = "DatabasePersistenceError";
+    this.operation = operation;
+    this.cause = cause;
     Object.setPrototypeOf(this, DatabasePersistenceError.prototype);
   }
 }

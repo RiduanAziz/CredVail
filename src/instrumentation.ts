@@ -17,6 +17,9 @@ export async function register() {
 
       const { validateDatabaseConfiguration } = await import("@/lib/db/persistence-policy");
       validateDatabaseConfiguration();
+
+      const { validateSessionConfiguration } = await import("@/lib/auth/session");
+      validateSessionConfiguration();
     }
   }
 }

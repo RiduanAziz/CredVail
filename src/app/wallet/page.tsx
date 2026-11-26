@@ -228,29 +228,28 @@ export default function WalletPage() {
   }
 
   return (
-    <div className="page-shell relative overflow-hidden px-4 py-14 text-foreground sm:px-6 lg:px-8">
-      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
-      <div className="relative mx-auto max-w-6xl space-y-10">
+    <div className="page-shell relative overflow-hidden px-4 py-14 text-[#0F172A] sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto max-w-6xl space-y-8">
         {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-border/60">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-4xl">
-                Holder Browser Wallet
-              </h1>
-              <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
-                <Sparkles className="w-3 h-3" />
-                Phase 11: Privacy & Selective Disclosure
-              </Badge>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-black/[0.08]">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-md border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-[#475569]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#0F1D38]" />
+              <span>Holder Browser Vault</span>
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Self-sovereign cryptographic credential vault with ECDSA-SD-2023 selective disclosure and zero-knowledge attribute blinding.
+            <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A] sm:text-4xl">
+              Holder Wallet{" "}
+              <span className="text-[#64748B] font-normal">& Selective Disclosure</span>
+            </h1>
+            <p className="text-sm text-[#475569]">
+              Self-sovereign cryptographic credential vault with client-side key binding and zero-knowledge disclosure controls.
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <Link href="/claim">
-              <Button variant="brand" className="gap-2 shadow-md">
+              <Button className="gap-2">
                 <Plus className="w-4 h-4" />
                 <span>Claim Credential</span>
               </Button>
@@ -289,7 +288,7 @@ export default function WalletPage() {
         {/* Credentials Grid */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold font-serif">Stored Verifiable Credentials</h2>
+            <h2 className="text-lg font-semibold tracking-[-0.02em]">Stored Verifiable Credentials</h2>
             <span className="text-xs text-muted-foreground font-mono">
               {credentials.length} {credentials.length === 1 ? "Credential" : "Credentials"} in Vault
             </span>
@@ -302,7 +301,7 @@ export default function WalletPage() {
                   <Award className="w-6 h-6" />
                 </div>
                 <div className="space-y-1">
-                  <CardTitle className="text-lg font-serif">No Credentials in Wallet</CardTitle>
+                  <CardTitle className="text-lg font-semibold tracking-[-0.015em]">No Credentials in Wallet</CardTitle>
                   <CardDescription className="text-xs">
                     You haven&apos;t claimed any digital certificates yet. Enter your certificate number and email to import your first verifiable credential.
                   </CardDescription>
@@ -325,7 +324,7 @@ export default function WalletPage() {
                         <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/30">
                           {cred.certificateNumber}
                         </Badge>
-                        <CardTitle className="text-base font-bold font-serif line-clamp-1">
+                        <CardTitle className="text-base font-semibold tracking-[-0.02em] line-clamp-1">
                           {cred.courseName}
                         </CardTitle>
                       </div>
@@ -412,7 +411,7 @@ export default function WalletPage() {
                       <Shield className="w-5 h-5" />
                     </div>
                     <div>
-                      <CardTitle className="text-base font-bold font-serif">
+                      <CardTitle className="text-base font-semibold tracking-[-0.02em]">
                         Selective Disclosure Consent
                       </CardTitle>
                       <CardDescription className="text-xs">

@@ -203,8 +203,10 @@ test('6. API Route Handlers for Authentication & Multi-Tenancy', async () => {
 
 test('7. Authentication UI Components & Pages', async () => {
   const uiPages = [
-    { file: 'src/app/(auth)/login/page.tsx', matches: ['Institutional Email', 'Password', 'Sign In', 'Authentication'] },
-    { file: 'src/app/(auth)/register/page.tsx', matches: ['Your Full Name', 'Institutional Email', 'Password', 'Registration'] },
+    { file: 'src/app/(auth)/login/page.tsx', matches: ['Email Address', 'Password', 'Sign In', 'Authentication'] },
+    { file: 'src/app/(auth)/register/page.tsx', matches: ['Register Your Institution', 'Create Your Personal Wallet', '/register/institution', '/register/wallet'] },
+    { file: 'src/app/(auth)/register/institution/page.tsx', matches: ['Account Administrator', 'Institution Information', 'Official Work Email'] },
+    { file: 'src/app/(auth)/register/wallet/page.tsx', matches: ['Personal Account Details', 'Full Name', 'Email Address'] },
   ];
 
   for (const { file, matches } of uiPages) {

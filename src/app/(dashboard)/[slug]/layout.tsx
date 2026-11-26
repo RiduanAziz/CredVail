@@ -14,6 +14,7 @@ import {
   Upload,
   KeyRound,
   History,
+  CreditCard,
   LogOut,
   ChevronRight,
   Building,
@@ -129,12 +130,17 @@ export default function DashboardLayout({
       href: `/${slug}/audit-logs`,
       icon: History,
     },
+    {
+      title: "Billing & Quotas",
+      href: `/${slug}/billing`,
+      icon: CreditCard,
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-[#f5f7fb] flex flex-col md:flex-row dark:bg-background">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:flex-row">
       {/* Mobile Top Header */}
-      <div className="md:hidden flex items-center justify-between border-b bg-brand-navy px-4 py-3 text-white">
+      <div className="md:hidden flex items-center justify-between border-b border-white/10 bg-[#0A1224] px-4 py-3 text-white">
         <Link href={`/${slug}`} className="flex items-center gap-2 font-bold">
           <Image
             src="/brand/brand-symbol-64.png"
@@ -148,6 +154,7 @@ export default function DashboardLayout({
         <Button
           variant="outline"
           size="sm"
+          className="border-white/20 bg-white/5 text-white hover:bg-white/10"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
           {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -156,7 +163,7 @@ export default function DashboardLayout({
 
       {/* Sidebar Navigation */}
       <aside
-        className={`w-full md:w-72 border-r bg-[#101d38] shrink-0 flex flex-col justify-between text-white ${
+        className={`w-full md:w-72 border-r border-white/10 bg-[#0A1224] shrink-0 flex flex-col justify-between text-white ${
           mobileMenuOpen ? "block" : "hidden md:flex"
         }`}
       >
@@ -169,30 +176,30 @@ export default function DashboardLayout({
                 alt="CREDVAIL"
                 width={36}
                 height={36}
-                className="h-9 w-9 rounded-xl shadow-sm object-contain transition-transform group-hover:scale-105"
+                className="h-9 w-9 rounded-lg object-contain transition-transform group-hover:scale-105"
               />
               <div className="flex flex-col leading-none">
-                <span className="font-extrabold tracking-tight text-base">
-                  CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span>
+                <span className="font-sans font-bold tracking-tight text-base text-white">
+                  CREDVAIL
                 </span>
-                <span className="text-[10px] text-blue-100/45 uppercase tracking-widest font-mono">
+                <span className="text-[10px] text-slate-400 uppercase tracking-[0.14em] font-mono mt-0.5">
                   Trust Network
                 </span>
               </div>
             </Link>
 
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
               <div className="flex items-center gap-2 mb-1">
-                <Building className="h-4 w-4 text-primary shrink-0" />
+                <Building className="h-4 w-4 text-slate-300 shrink-0" />
                 <span className="text-xs font-semibold truncate text-white">
                   {tenantName}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[10px] text-blue-100/45 font-mono">
+                <span className="text-[10px] text-slate-400 font-mono">
                   /{slug}
                 </span>
-                <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono">
+                <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-mono border-white/20 bg-white/[0.06] text-slate-200">
                   {userRole}
                 </Badge>
               </div>
@@ -212,10 +219,10 @@ export default function DashboardLayout({
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                     isActive
-                      ? "bg-brand-gradient text-white shadow-sm font-semibold"
-                      : "text-blue-100/60 hover:bg-white/10 hover:text-white"
+                      ? "bg-white/[0.12] text-white border border-white/15 font-semibold"
+                      : "text-slate-400 hover:bg-white/[0.06] hover:text-white border border-transparent"
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
@@ -263,19 +270,20 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <header className="flex h-16 shrink-0 items-center justify-between border-b bg-white/80 px-5 backdrop-blur-md md:px-8 dark:bg-card/80">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <main className="relative flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#F8FAFC]">
+        <div className="surface-grid pointer-events-none absolute inset-0" />
+        <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-black/[0.08] bg-white/90 px-5 backdrop-blur-md md:px-8">
+          <div className="flex items-center gap-2 text-xs text-[#64748B]">
             <span>Institutions</span>
             <ChevronRight className="h-3 w-3" />
-            <span className="text-foreground font-medium">{tenantName}</span>
+            <span className="text-[#0F172A] font-medium">{tenantName}</span>
           </div>
 
           <div className="flex items-center gap-3">
             <Link
-              href="/"
+              href="/verify"
               target="_blank"
-              className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+              className="text-xs text-[#475569] hover:text-[#0F1D38] font-medium flex items-center gap-1 transition-colors"
             >
               <span>Public Verification</span>
               <ExternalLink className="h-3 w-3" />
@@ -283,7 +291,7 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <div className="flex-1 p-5 md:p-8">
+        <div className="relative z-10 flex-1 p-5 md:p-8">
           {children}
         </div>
       </main>

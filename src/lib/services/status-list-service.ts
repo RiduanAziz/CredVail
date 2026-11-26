@@ -27,6 +27,21 @@ export interface W3CStatusListCredential {
   };
 }
 
+export interface W3CBitstringStatusListCredential {
+  "@context": string[];
+  id: string;
+  type: string[];
+  issuer: string;
+  validFrom: string;
+  credentialSubject: {
+    id: string;
+    type: "BitstringStatusList";
+    statusPurpose: "revocation" | "suspension";
+    encodedList: string;
+    statusSize?: number;
+  };
+}
+
 export class StatusListService {
   /**
    * Default bitstring size: 131,072 bits (16,384 bytes).
@@ -94,6 +109,26 @@ export class StatusListService {
   }
 
   /**
+   * Encodes a raw bitstring buffer as W3C Bitstring Status List v1.0 multibase
+   * base64url (no-padding) with leading 'u' prefix over GZIP bytes.
+   */
+  public static encodeMultibaseBitstring(buffer: Buffer): string {
+    const gzipped = zlib.gzipSync(buffer);
+    return `u${gzipped.toString("base64url")}`;
+  }
+
+  /**
+   * Decodes a W3C Bitstring Status List v1.0 multibase ('u'-prefixed base64url GZIP) string.
+   */
+  public static decodeMultibaseBitstring(encodedList: string): Buffer {
+    if (!encodedList || !encodedList.startsWith("u")) {
+      throw new Error("Invalid W3C Bitstring Status List v1.0 multibase encoding (expected 'u' prefix).");
+    }
+    const compressed = Buffer.from(encodedList.slice(1), "base64url");
+    return zlib.gunzipSync(compressed);
+  }
+
+  /**
    * Computes the deterministic SHA-256 digest of the compressed or raw bitstring.
    */
   public static computeStatusDigest(data: string | Buffer): string {
@@ -129,6 +164,43 @@ export class StatusListService {
         type: "StatusList2021",
         statusPurpose: "revocation",
         encodedList: params.bitstringGzipBase64,
+      },
+    };
+  }
+
+  /**
+   * Builds a W3C Bitstring Status List v1.0 Verifiable Credential using multibase 'u' GZIP encoding.
+   */
+  public static buildBitstringStatusListCredential(params: {
+    tenantSlug: string;
+    tenantName: string;
+    statusEpoch: number;
+    bufferOrGzipBase64: Buffer | string;
+    issuerDid: string;
+    statusPurpose?: "revocation" | "suspension";
+    baseUrl?: string;
+  }): W3CBitstringStatusListCredential {
+    const baseUrl = params.baseUrl || "https://credvail.com";
+    const statusUrl = `${baseUrl}/tenants/${params.tenantSlug}/status/${params.statusEpoch}`;
+    const rawBuffer =
+      typeof params.bufferOrGzipBase64 === "string"
+        ? params.bufferOrGzipBase64.startsWith("u")
+          ? this.decodeMultibaseBitstring(params.bufferOrGzipBase64)
+          : this.decompressBitstring(params.bufferOrGzipBase64)
+        : params.bufferOrGzipBase64;
+
+    return {
+      "@context": ["https://www.w3.org/ns/credentials/v2"],
+      id: `${statusUrl}#credential`,
+      type: ["VerifiableCredential", "BitstringStatusListCredential"],
+      issuer: params.issuerDid,
+      validFrom: new Date().toISOString(),
+      credentialSubject: {
+        id: statusUrl,
+        type: "BitstringStatusList",
+        statusPurpose: params.statusPurpose || "revocation",
+        encodedList: this.encodeMultibaseBitstring(rawBuffer),
+        statusSize: 1,
       },
     };
   }

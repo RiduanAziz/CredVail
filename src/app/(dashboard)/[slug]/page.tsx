@@ -104,10 +104,10 @@ export default function TenantOverviewPage({
   return (
     <div className="space-y-8">
       {/* Institution Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-gradient-to-r from-card to-muted/30 border rounded-2xl shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-white border border-black/[0.08] rounded-xl shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A]">
               {tenant.name}
             </h1>
             <Badge
@@ -149,17 +149,21 @@ export default function TenantOverviewPage({
           </div>
           <p className="text-xs text-muted-foreground">
             Legal Entity: <span className="text-foreground font-medium">{tenant.legalEntityName}</span>
-            {" • "}
-            Website:{" "}
-            <a
-              href={tenant.websiteUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-primary hover:underline inline-flex items-center gap-0.5"
-            >
-              {tenant.websiteUrl}
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
+            {tenant.websiteUrl && (
+              <>
+                {" • "}
+                Website:{" "}
+                <a
+                  href={tenant.websiteUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline inline-flex items-center gap-0.5"
+                >
+                  {tenant.websiteUrl}
+                  <ExternalLink className="h-2.5 w-2.5" />
+                </a>
+              </>
+            )}
           </p>
         </div>
 

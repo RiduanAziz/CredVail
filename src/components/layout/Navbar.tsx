@@ -11,9 +11,18 @@ export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const isHome = pathname === "/";
-  const publicRoute = ["/", "/login", "/register", "/verify", "/wallet", "/claim"].some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
+  const publicRoute = [
+    "/",
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/verify",
+    "/wallet",
+    "/claim",
+    "/admin",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
   const closeMenu = () => setMenuOpen(false);
 
@@ -21,11 +30,7 @@ export function Navbar() {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full border-b backdrop-blur-md transition-colors ${
-        isHome
-          ? "border-black/8 bg-[#F4F4F6]/85 text-[#0C0D12]"
-          : "bg-background/85"
-      }`}
+      className="sticky top-0 z-50 w-full border-b border-black/[0.08] bg-[#F8FAFC]/90 text-[#0F172A] backdrop-blur-md transition-colors"
     >
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-8">
@@ -42,41 +47,29 @@ export function Navbar() {
               CREDVAIL
             </span>
           </Link>
-          <nav
-            className={`hidden md:flex items-center gap-6 text-sm font-medium ${
-              isHome ? "text-[#4B5563]" : "text-muted-foreground"
-            }`}
-          >
+          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#475569]">
             <Link
-              href="#platform"
-              className={`transition-colors ${
-                isHome ? "hover:text-[#0C0D12]" : "hover:text-foreground"
-              }`}
+              href={isHome ? "#platform" : "/#platform"}
+              className="transition-colors hover:text-[#0F172A]"
             >
               Platform
             </Link>
             <Link
-              href="#lifecycle"
-              className={`transition-colors ${
-                isHome ? "hover:text-[#0C0D12]" : "hover:text-foreground"
-              }`}
+              href={isHome ? "#lifecycle" : "/#lifecycle"}
+              className="transition-colors hover:text-[#0F172A]"
             >
               Lifecycle
             </Link>
             <Link
               href="/verify"
-              className={`flex items-center gap-1.5 transition-colors ${
-                isHome ? "hover:text-[#0C0D12]" : "hover:text-foreground"
-              }`}
+              className="flex items-center gap-1.5 transition-colors hover:text-[#0F172A]"
             >
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               Public Verifier
             </Link>
             <Link
               href="/wallet"
-              className={`transition-colors ${
-                isHome ? "hover:text-[#0C0D12]" : "hover:text-foreground"
-              }`}
+              className="transition-colors hover:text-[#0F172A]"
             >
               Holder Wallet
             </Link>
@@ -87,9 +80,7 @@ export function Navbar() {
             <Button
               variant="ghost"
               size="sm"
-              className={`hidden sm:inline-flex ${
-                isHome ? "text-[#0C0D12] hover:bg-black/5 font-semibold" : ""
-              }`}
+              className="hidden sm:inline-flex text-[#0F172A] hover:bg-black/5 font-medium"
             >
               Sign In
             </Button>

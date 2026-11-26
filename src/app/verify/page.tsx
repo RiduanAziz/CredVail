@@ -109,25 +109,26 @@ export default function UniversalVerifyPage() {
   };
 
   return (
-    <div className="page-shell relative overflow-hidden px-4 py-16 text-foreground sm:px-6 lg:px-8">
-      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
-      <div className="relative mx-auto max-w-5xl space-y-12">
+    <div className="page-shell relative overflow-hidden px-4 py-16 text-[#0F172A] sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto max-w-5xl space-y-10">
         {/* Hero Section */}
         <div className="text-center space-y-4">
-          <div className="section-eyebrow inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3.5 py-1.5">
-            <Sparkles className="w-3.5 h-3.5" />
-            Decentralized Credential Verification Protocol
+          <div className="inline-flex items-center gap-2 rounded-md border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-[#475569]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#0F1D38]" />
+            <span>Decentralized Verification Protocol</span>
           </div>
-          <h1 className="text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-6xl">
-            Verify Any Credential Instantly
+          <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A] sm:text-5xl">
+            Verify Any Credential{" "}
+            <span className="text-[#64748B] font-normal">instantly</span>
           </h1>
-          <p className="text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base text-[#475569] max-w-2xl mx-auto">
             Mathematical proof of authenticity powered by W3C Verifiable Credentials 2.0, ECDSA NIST P-256 signatures, and Ethereum Sepolia smart contracts.
           </p>
         </div>
 
         {/* Input Switcher Tabs */}
-        <Card className="glass-surface overflow-hidden rounded-2xl shadow-xl">
+        <Card className="overflow-hidden rounded-xl border border-black/[0.08] bg-white shadow-sm">
           <CardHeader className="pb-3 border-b border-border/60">
             <div className="flex items-center justify-between">
               <div className="flex gap-2">

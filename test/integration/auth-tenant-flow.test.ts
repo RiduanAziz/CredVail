@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { AuthService } from "@/lib/services/auth-service";
 import { TenantService } from "@/lib/services/tenant-service";
 import { UserRepository, inMemoryUserStore } from "@/lib/repositories/user-repository";
+import { EmailVerificationRepository } from "@/lib/repositories/email-verification-repository";
 import { TenantRepository, inMemoryTenantStore } from "@/lib/repositories/tenant-repository";
 import { verifySessionToken } from "@/lib/auth/session";
 
@@ -27,6 +28,7 @@ describe("End-to-End Authentication and Multi-Tenancy Flow", () => {
       password: "CorrectHorseBatteryStaple!2026",
       fullName: "Alice Turing",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(aliceRegistration.verificationToken);
 
     expect(aliceRegistration.user.id).toBeDefined();
     expect(aliceRegistration.user.email).toBe("alice@apex.edu");
@@ -110,6 +112,7 @@ describe("End-to-End Authentication and Multi-Tenancy Flow", () => {
       password: "BobPasswordSecure!2026",
       fullName: "Bob Lovelace",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(bobRegistration.verificationToken);
 
     // 9. Alice invites Bob to Apex Institute as TEMPLATE_DESIGNER
     const bobMember = await tenantService.inviteMember(
@@ -171,6 +174,7 @@ describe("End-to-End Authentication and Multi-Tenancy Flow", () => {
       password: "CharliePasswordSafe!2026",
       fullName: "Charlie Babbage",
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(charlieRegistration.verificationToken);
 
     const betaTenant = await tenantService.createOrganization(
       {

@@ -13,11 +13,11 @@ const badgeVariants = cva(
           "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive:
           "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
-        outline: "text-foreground",
+        outline: "border-black/[0.12] text-[#0F172A] bg-white",
         brand:
-          "border-transparent bg-brand-gradient text-white shadow-sm font-semibold",
+          "border-transparent bg-[#0F1D38] text-white shadow-none font-medium",
         brandSubtle:
-          "border-indigo-200/60 bg-indigo-50/80 text-indigo-700 dark:border-indigo-800/60 dark:bg-indigo-950/40 dark:text-indigo-300 font-medium",
+          "border-black/[0.08] bg-slate-100 text-[#475569] font-medium",
         verified:
           "border-transparent bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800",
         revoked:

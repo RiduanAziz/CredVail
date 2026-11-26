@@ -34,12 +34,27 @@ describe("CRV-SEC-01.1: Next.js Production Server Startup Validation Lifecycle",
     await expect(register()).rejects.toThrow(/malformed/i);
   });
 
-  it("should succeed on production server startup when KMS_MASTER_KEY is valid", async () => {
+  it("should succeed on production server startup when KMS_MASTER_KEY and SESSION_SECRET are valid", async () => {
     (process.env as any).NODE_ENV = "production";
     delete (process.env as any).NEXT_PHASE;
     process.env.KMS_MASTER_KEY = validMasterKeyBase64;
+    process.env.SESSION_SECRET = "prod_test_session_secret_with_at_least_32_characters!";
+    process.env.DATABASE_URL ||= "postgresql://user:pass@localhost:5432/credvail_test";
 
     await expect(register()).resolves.toBeUndefined();
+  });
+
+  it("should fail closed on production server startup when SESSION_SECRET is missing or insecure", async () => {
+    (process.env as any).NODE_ENV = "production";
+    delete (process.env as any).NEXT_PHASE;
+    process.env.KMS_MASTER_KEY = validMasterKeyBase64;
+    process.env.DATABASE_URL ||= "postgresql://user:pass@localhost:5432/credvail_test";
+    delete process.env.SESSION_SECRET;
+
+    await expect(register()).rejects.toThrow(/SESSION_SECRET is not configured/i);
+
+    process.env.SESSION_SECRET = "too-short";
+    await expect(register()).rejects.toThrow(/at least 32 characters/i);
   });
 
   it("should bypass boot check during static compilation build phase (NEXT_PHASE = phase-production-build)", async () => {

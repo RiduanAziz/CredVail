@@ -132,37 +132,35 @@ function ClaimCredentialContent() {
   };
 
   return (
-    <div className="page-shell relative overflow-hidden px-4 py-16 text-foreground sm:px-6 lg:px-8">
-      <div className="surface-grid pointer-events-none absolute inset-0 opacity-50" />
-      <div className="relative mx-auto max-w-2xl space-y-10">
+    <div className="page-shell relative overflow-hidden px-4 py-16 text-[#0F172A] sm:px-6 lg:px-8">
+      <div className="surface-grid pointer-events-none absolute inset-0" />
+      <div className="relative mx-auto max-w-2xl space-y-8">
         {/* Navigation */}
-        <div className="flex items-center justify-between pb-4 border-b border-border/60">
-          <Link href="/wallet" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <div className="flex items-center justify-between pb-4 border-b border-black/[0.08]">
+          <Link href="/wallet" className="flex items-center gap-2 text-sm text-[#475569] hover:text-[#0F172A] transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Holder Wallet</span>
           </Link>
-          <Badge variant="outline" className="font-mono text-xs border-primary/30 text-primary gap-1">
-            <Sparkles className="w-3 h-3" />
-            H1: Cryptographic Ownership
-          </Badge>
+          <div className="inline-flex items-center gap-2 rounded-md border border-black/[0.08] bg-white px-3 py-1 text-xs font-medium text-[#475569]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#0F1D38]" />
+            <span>Cryptographic Ownership</span>
+          </div>
         </div>
 
         {/* Hero Header */}
         <div className="text-center space-y-3">
-          <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-            <Wallet className="w-7 h-7" />
-          </div>
-          <h1 className="text-3xl font-semibold tracking-[-0.04em] text-foreground sm:text-5xl">
-            Claim Your Digital Credential
+          <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A] sm:text-5xl">
+            Claim Your Digital{" "}
+            <span className="text-[#64748B] font-normal">credential</span>
           </h1>
-          <p className="text-sm sm:text-base text-muted-foreground max-w-lg mx-auto">
+          <p className="text-sm sm:text-base text-[#475569] max-w-lg mx-auto">
             Import your verifiable credential into your private browser wallet using your single-use institutional claim token.
           </p>
         </div>
 
         {/* Claim Card */}
         {!claimedCred ? (
-          <Card className="glass-surface overflow-hidden rounded-2xl shadow-xl">
+          <Card className="overflow-hidden rounded-xl border border-black/[0.08] bg-white shadow-sm">
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-bold">Ownership Verification</CardTitle>
               <CardDescription className="text-xs">
@@ -238,7 +236,7 @@ function ClaimCredentialContent() {
               <div className="w-12 h-12 mx-auto rounded-full bg-emerald-600 text-white flex items-center justify-center mb-2 shadow-sm">
                 <CheckCircle2 className="w-7 h-7" />
               </div>
-              <CardTitle className="text-xl font-bold font-serif text-emerald-950 dark:text-emerald-100">
+              <CardTitle className="text-xl font-semibold tracking-[-0.02em] text-emerald-950 dark:text-emerald-100">
                 Credential Successfully Claimed!
               </CardTitle>
               <CardDescription className="text-xs text-emerald-800 dark:text-emerald-200">
@@ -256,7 +254,7 @@ function ClaimCredentialContent() {
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-bold text-base font-serif">{claimedCred.courseName}</h3>
+                  <h3 className="font-semibold text-base tracking-[-0.015em]">{claimedCred.courseName}</h3>
                   <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                     <Building2 className="w-3.5 h-3.5" />
                     <span>{claimedCred.issuerName}</span>

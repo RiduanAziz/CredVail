@@ -45,13 +45,24 @@ export async function GET(
       });
     }
 
-    const vc = StatusListService.buildStatusListCredential({
-      tenantSlug: tenant.slug,
-      tenantName: tenant.name,
-      statusEpoch: epochNum,
-      bitstringGzipBase64: snapshot.bitstringGzipBase64,
-      issuerDid: tenant.didUri,
-    });
+    const spec = request.nextUrl.searchParams.get("spec") || request.nextUrl.searchParams.get("format");
+    const useV1 = spec === "v1" || spec === "bitstring-v1";
+
+    const vc = useV1
+      ? StatusListService.buildBitstringStatusListCredential({
+          tenantSlug: tenant.slug,
+          tenantName: tenant.name,
+          statusEpoch: epochNum,
+          bufferOrGzipBase64: snapshot.bitstringGzipBase64,
+          issuerDid: tenant.didUri,
+        })
+      : StatusListService.buildStatusListCredential({
+          tenantSlug: tenant.slug,
+          tenantName: tenant.name,
+          statusEpoch: epochNum,
+          bitstringGzipBase64: snapshot.bitstringGzipBase64,
+          issuerDid: tenant.didUri,
+        });
 
     return NextResponse.json(vc, {
       status: 200,
@@ -59,6 +70,7 @@ export async function GET(
         "Content-Type": "application/vc+json; charset=utf-8",
         "Cache-Control": "public, max-age=60, s-maxage=300",
         "Access-Control-Allow-Origin": "*",
+        "X-Credvail-StatusList-Spec": useV1 ? "bitstring-v1.0" : "status-list-2021",
       },
     });
   } catch (error: any) {

@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { hashPassword, verifyPassword, passwordSchema } from "../../src/lib/auth/password";
+import {
+  hashPassword,
+  verifyPassword,
+  passwordSchema,
+  evaluatePasswordStrength,
+} from "../../src/lib/auth/password";
 
-describe("Argon2id Password Security & Hashing", () => {
+describe("Argon2id Password Security & NIST SP 800-63B-4 Policy", () => {
   it("should generate a valid Argon2id hash conforming to RFC 9106", async () => {
-    const password = "StrongPassword123!";
+    const password = "correct horse battery staple";
     const hash = await hashPassword(password);
 
     expect(hash).toContain("$argon2id$");
@@ -12,39 +17,35 @@ describe("Argon2id Password Security & Hashing", () => {
     expect(hash).toContain("p=4");
   });
 
-  it("should successfully verify a correct password against its Argon2id hash", async () => {
-    const password = "CorrectHorseBatteryStaple99#";
+  it("should normalize Unicode consistently and verify matching/non-matching passphrases", async () => {
+    const password = "café passphrase with spâces";
     const hash = await hashPassword(password);
 
-    const isMatch = await verifyPassword(password, hash);
-    expect(isMatch).toBe(true);
+    expect(await verifyPassword(password, hash)).toBe(true);
+    expect(await verifyPassword("wrong passphrase here", hash)).toBe(false);
   });
 
-  it("should reject an incorrect password", async () => {
-    const password = "ValidPassword123$";
-    const hash = await hashPassword(password);
+  it("enforces >=15 char length, permits spaces/Unicode without composition rules, supports >=64 chars, and blocks common passwords", () => {
+    // Valid lowercase passphrase with spaces (no uppercase/digit/symbol required per NIST SP 800-63B-4)
+    expect(passwordSchema.safeParse("lowercase passphrase only").success).toBe(true);
 
-    const isMatch = await verifyPassword("WrongPassword123$", hash);
-    expect(isMatch).toBe(false);
-  });
+    // Valid Unicode passphrase >= 15 chars
+    expect(passwordSchema.safeParse("sécurité numérique crédvail").success).toBe(true);
 
-  it("should enforce strong password policy constraints via Zod", () => {
-    // Valid password
-    expect(passwordSchema.safeParse("ValidPass123!").success).toBe(true);
+    // Supports at least 64+ character passphrases without truncation
+    expect(passwordSchema.safeParse("a-long-passphrase-for-enterprise-issuers-" + "x".repeat(40)).success).toBe(true);
 
-    // Too short (< 8 chars)
+    // Rejects under 15 chars
     expect(passwordSchema.safeParse("Short1!").success).toBe(false);
+    expect(passwordSchema.safeParse("FourteenChars!").success).toBe(false);
 
-    // Missing uppercase
-    expect(passwordSchema.safeParse("lowercase123!").success).toBe(false);
+    // Rejects common breached/repetitive passwords
+    expect(passwordSchema.safeParse("password1234567").success).toBe(false);
+    expect(passwordSchema.safeParse("aaaaaaaaaaaaaaaa").success).toBe(false);
 
-    // Missing lowercase
-    expect(passwordSchema.safeParse("UPPERCASE123!").success).toBe(false);
-
-    // Missing digit
-    expect(passwordSchema.safeParse("NoDigitsAllowed!").success).toBe(false);
-
-    // Missing special symbol
-    expect(passwordSchema.safeParse("NoSpecialChar123").success).toBe(false);
+    const strength = evaluatePasswordStrength("my institutional credential passphrase");
+    expect(strength.meetsLength).toBe(true);
+    expect(strength.isBlocked).toBe(false);
+    expect(strength.score).toBeGreaterThanOrEqual(3);
   });
 });

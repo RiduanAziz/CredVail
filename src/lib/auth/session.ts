@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { PlatformRole, TenantRole } from "../../types/index.ts";
+import { SessionRevocationService } from "./session-revocation.ts";
 
 export interface SessionTenantInfo {
   tenantId: string;
@@ -24,9 +25,48 @@ export interface SessionPayload {
 
 export const SESSION_COOKIE_NAME = "credvail_session";
 export const SESSION_DURATION_SECONDS = 60 * 60 * 24; // 24 hours
+export const DEFAULT_DEV_SESSION_SECRET = "credvail_default_development_secret_32bytes_minimum_key!";
+
+export class SessionConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionConfigurationError";
+  }
+}
+
+/**
+ * Validates that SESSION_SECRET is properly configured for the current environment.
+ * Fails closed in production if missing, under 32 characters, or set to the dev default.
+ */
+export function validateSessionConfiguration(): string {
+  const secret = process.env.SESSION_SECRET?.trim();
+  const isProd =
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PHASE !== "phase-production-build";
+
+  if (isProd) {
+    if (!secret) {
+      throw new SessionConfigurationError(
+        "FATAL: SESSION_SECRET is not configured in production environment."
+      );
+    }
+    if (secret.length < 32) {
+      throw new SessionConfigurationError(
+        "FATAL: SESSION_SECRET must be at least 32 characters in production."
+      );
+    }
+    if (secret === DEFAULT_DEV_SESSION_SECRET) {
+      throw new SessionConfigurationError(
+        "FATAL: SESSION_SECRET cannot use the default development fallback secret in production."
+      );
+    }
+  }
+
+  return secret || DEFAULT_DEV_SESSION_SECRET;
+}
 
 function getSessionSecret(): string {
-  return process.env.SESSION_SECRET || "credvail_default_development_secret_32bytes_minimum_key!";
+  return validateSessionConfiguration();
 }
 
 function base64UrlEncode(data: string | Buffer): string {
@@ -139,10 +179,27 @@ export function verifySessionToken(token: string): SessionPayload | null {
       return null;
     }
 
+    // Reject revoked sessions
+    if (payload.jti && SessionRevocationService.isRevokedSync(payload.jti)) {
+      return null;
+    }
+
     return payload;
   } catch {
     return null;
   }
+}
+
+/**
+ * Verifies signature, expiration, and durable revocation store asynchronously.
+ */
+export async function verifySessionTokenAsync(token: string): Promise<SessionPayload | null> {
+  const payload = verifySessionToken(token);
+  if (!payload) return null;
+  if (payload.jti && (await SessionRevocationService.isRevoked(payload.jti))) {
+    return null;
+  }
+  return payload;
 }
 
 /**

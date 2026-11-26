@@ -28,6 +28,7 @@ import type { SessionPayload } from "../auth/session.ts";
 import { TEMPLATE_PRESETS } from "../templates/presets.ts";
 import type { MerkleInclusionProof } from "../../types/index.ts";
 import { ClaimInvitationService } from "./claim-invitation-service.ts";
+import { BatchOutboxRepository } from "../repositories/batch-outbox-repository.ts";
 
 export interface BatchClaimLink {
   certificateNumber: string;
@@ -58,6 +59,9 @@ export interface BatchProcessingResult {
   claimLinks?: BatchClaimLink[];
   zipSize: number;
   processedAt: string;
+  idempotentReplay?: boolean;
+  outboxEventCount?: number;
+  failedItems?: Array<{ email: string; certificateNumber: string; error: string }>;
 }
 
 export class BatchProcessingService {
@@ -189,10 +193,25 @@ export class BatchProcessingService {
     tenantSlug: string,
     batchId: string,
     session?: SessionPayload,
-    baseUrl: string = "https://credvail.com"
+    baseUrl: string = "https://credvail.com",
+    options?: { idempotencyKey?: string; simulateFailEmail?: string }
   ): Promise<BatchProcessingResult> {
     const { tenant, role } = await this.resolveTenantContext(tenantSlug, session);
     assertTenantPermission(role, "batches:create");
+
+    if (options?.idempotencyKey) {
+      const cached = await BatchOutboxRepository.getIdempotentResult<BatchProcessingResult>(
+        tenant.id,
+        batchId,
+        options.idempotencyKey
+      );
+      if (cached) {
+        return {
+          ...cached,
+          idempotentReplay: true,
+        };
+      }
+    }
 
     // 1. Fetch batch record
     const batch = await BatchRepository.findBatchById(tenant.id, batchId);
@@ -347,7 +366,10 @@ export class BatchProcessingService {
       const merkleTree = VcService.buildBatchMerkleTree(leaves);
       const merkleRoot = merkleTree.getRoot();
 
-      // Stage 3: Generate Merkle Proofs, attach to VCs, and persist
+      // Stage 3: Generate Merkle Proofs, attach to VCs, and persist with durable outbox tracking
+      let outboxEventCount = 0;
+      const failedItems: Array<{ email: string; certificateNumber: string; error: string }> = [];
+
       for (let i = 0; i < stagedItems.length; i++) {
         const item = stagedItems[i];
         const merkleProof = VcService.generateMerkleProof(merkleTree, i);
@@ -369,26 +391,65 @@ export class BatchProcessingService {
           merkleProof,
         });
 
-        // Automatically create single-use claim invitation for recipient
-        const invite = await ClaimInvitationService.createInvitation({
-          credentialId: item.credentialId,
-          certificateNumber: item.certNumber,
-          recipientEmail: item.recipient.email,
-          tenantId: tenant.id,
-        });
+        let claimUrl = "";
+        let rawToken = "";
+        try {
+          if (
+            options?.simulateFailEmail &&
+            item.recipient.email.toLowerCase() === options.simulateFailEmail.toLowerCase()
+          ) {
+            throw new Error(`Simulated invitation dispatch failure for ${item.recipient.email}`);
+          }
 
-        const rawToken = invite.rawToken;
-        // Secure URL fragment: token resides strictly in URL hash (#token=...) to prevent
-        // leakage in web server access logs, reverse proxies, and HTTP referrers.
-        const claimUrl = `${baseUrl}/claim?cert=${encodeURIComponent(item.certNumber)}#token=${rawToken}`;
+          // Automatically create single-use claim invitation for recipient
+          const invite = await ClaimInvitationService.createInvitation({
+            credentialId: item.credentialId,
+            certificateNumber: item.certNumber,
+            recipientEmail: item.recipient.email,
+            tenantId: tenant.id,
+          });
 
-        claimLinks.push({
-          certificateNumber: item.certNumber,
-          recipientName: item.recipient.fullName,
-          recipientEmail: item.recipient.email,
-          claimUrl,
-          claimToken: rawToken,
-        });
+          rawToken = invite.rawToken;
+          // Secure URL fragment: token resides strictly in URL hash (#token=...) to prevent
+          // leakage in web server access logs, reverse proxies, and HTTP referrers.
+          claimUrl = `${baseUrl}/claim?cert=${encodeURIComponent(item.certNumber)}#token=${rawToken}`;
+
+          claimLinks.push({
+            certificateNumber: item.certNumber,
+            recipientName: item.recipient.fullName,
+            recipientEmail: item.recipient.email,
+            claimUrl,
+            claimToken: rawToken,
+          });
+
+          await BatchOutboxRepository.enqueueEvent({
+            tenantId: tenant.id,
+            batchId: batch.id,
+            credentialId: item.credentialId,
+            certificateNumber: item.certNumber,
+            recipientEmail: item.recipient.email,
+            eventType: "CLAIM_INVITATION_READY",
+            status: "PROCESSED",
+          });
+          outboxEventCount++;
+        } catch (itemErr: any) {
+          await BatchOutboxRepository.enqueueEvent({
+            tenantId: tenant.id,
+            batchId: batch.id,
+            credentialId: item.credentialId,
+            certificateNumber: item.certNumber,
+            recipientEmail: item.recipient.email,
+            eventType: "CLAIM_INVITATION_READY",
+            status: "FAILED",
+            lastError: itemErr?.message || "Outbox dispatch error",
+          });
+          outboxEventCount++;
+          failedItems.push({
+            email: item.recipient.email,
+            certificateNumber: item.certNumber,
+            error: itemErr?.message || "Outbox dispatch error",
+          });
+        }
 
         generatedCredentials.push({
           id: credRecord.id,
@@ -458,7 +519,7 @@ export class BatchProcessingService {
         },
       });
 
-      return {
+      const resultPayload: BatchProcessingResult = {
         batchId: batch.id,
         batchNumber: batch.batchNumber,
         status: "GENERATED",
@@ -468,7 +529,20 @@ export class BatchProcessingService {
         claimLinks,
         zipSize: zipArchiveBytes.length,
         processedAt: new Date().toISOString(),
+        outboxEventCount,
+        ...(failedItems.length > 0 ? { failedItems } : {}),
       };
+
+      if (options?.idempotencyKey) {
+        await BatchOutboxRepository.saveIdempotentResult(
+          tenant.id,
+          batch.id,
+          options.idempotencyKey,
+          resultPayload
+        );
+      }
+
+      return resultPayload;
     } catch (err: any) {
       this.clearBatchClaimExport(batch.id);
       await BatchRepository.updateBatchStatus(tenant.id, batch.id, "FAILED", {
@@ -575,5 +649,84 @@ export class BatchProcessingService {
     }
 
     return { zipBytes, batchNumber: batch.batchNumber };
+  }
+
+  /**
+   * Safely retries failed or pending outbox delivery events for a batch without recreating credentials.
+   */
+  static async retryFailedBatchItems(
+    tenantSlug: string,
+    batchId: string,
+    session?: SessionPayload,
+    baseUrl: string = "https://credvail.com"
+  ): Promise<{
+    batchId: string;
+    retriedCount: number;
+    recoveredLinks: BatchClaimLink[];
+    remainingFailedCount: number;
+  }> {
+    const { tenant, role } = await this.resolveTenantContext(tenantSlug, session);
+    assertTenantPermission(role, "batches:create");
+
+    const batch = await BatchRepository.findBatchById(tenant.id, batchId);
+    if (!batch) {
+      throw new Error(`Batch with ID "${batchId}" not found for this institution.`);
+    }
+
+    const events = await BatchOutboxRepository.listEvents(tenant.id, batchId);
+    const pendingOrFailed = events.filter((e) => e.status === "FAILED" || e.status === "PENDING");
+    const recoveredLinks: BatchClaimLink[] = [];
+
+    for (const evt of pendingOrFailed) {
+      try {
+        const invite = await ClaimInvitationService.createInvitation({
+          credentialId: evt.credentialId,
+          certificateNumber: evt.certificateNumber,
+          recipientEmail: evt.recipientEmail,
+          tenantId: tenant.id,
+        });
+        await BatchOutboxRepository.updateEventStatus(tenant.id, batchId, evt.id, "PROCESSED", null);
+        const claimUrl = `${baseUrl}/claim?cert=${encodeURIComponent(evt.certificateNumber)}#token=${invite.rawToken}`;
+        recoveredLinks.push({
+          certificateNumber: evt.certificateNumber,
+          recipientName: evt.recipientEmail,
+          recipientEmail: evt.recipientEmail,
+          claimUrl,
+          claimToken: invite.rawToken,
+        });
+      } catch (err: any) {
+        await BatchOutboxRepository.updateEventStatus(
+          tenant.id,
+          batchId,
+          evt.id,
+          "FAILED",
+          err?.message || "Retry dispatch failed"
+        );
+      }
+    }
+
+    const refreshedEvents = await BatchOutboxRepository.listEvents(tenant.id, batchId);
+    const remainingFailedCount = refreshedEvents.filter((e) => e.status === "FAILED").length;
+
+    await this.tenantRepo.recordAuditLog({
+      tenantId: tenant.id,
+      userId: session?.sub,
+      userEmail: session?.email,
+      action: "BATCH_OUTBOX_RETRIED",
+      resourceType: "IssuanceBatch",
+      resourceId: batch.id,
+      metadata: {
+        retriedCount: pendingOrFailed.length,
+        recoveredCount: recoveredLinks.length,
+        remainingFailedCount,
+      },
+    });
+
+    return {
+      batchId: batch.id,
+      retriedCount: pendingOrFailed.length,
+      recoveredLinks,
+      remainingFailedCount,
+    };
   }
 }

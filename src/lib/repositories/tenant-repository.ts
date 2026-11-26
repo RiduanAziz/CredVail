@@ -20,7 +20,20 @@ export interface TenantRecord {
   slug: string;
   name: string;
   legalEntityName: string;
-  websiteUrl: string;
+  websiteUrl: string | null;
+  organizationType?: string | null;
+  organizationTypeOther?: string | null;
+  countryCode?: string | null;
+  registrationNumber?: string | null;
+  registrationAuthority?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  region?: string | null;
+  postalCode?: string | null;
+  contactPhone?: string | null;
+  adminContactPosition?: string | null;
+  authorizedToRegisterAt?: Date | null;
   didUri: string;
   logoUrl: string | null;
   brandingConfig: Record<string, unknown>;
@@ -55,19 +68,53 @@ class InMemoryTenantStore {
     slug: string;
     name: string;
     legalEntityName: string;
-    websiteUrl: string;
+    websiteUrl?: string | null;
+    organizationType?: string | null;
+    organizationTypeOther?: string | null;
+    countryCode?: string | null;
+    registrationNumber?: string | null;
+    registrationAuthority?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    contactPhone?: string | null;
+    adminContactPosition?: string | null;
+    authorizedToRegisterAt?: Date | null;
     didUri: string;
     logoUrl?: string;
     brandingConfig?: Record<string, unknown>;
     ownerUserId: string;
+    ownerEmail?: string;
+    ownerFullName?: string;
   }): Promise<TenantRecord> {
+    const normalizedSlug = data.slug.toLowerCase();
+    for (const existing of this.tenants.values()) {
+      if (existing.slug.toLowerCase() === normalizedSlug) {
+        throw new Error(`An organization with the slug '${normalizedSlug}' already exists`);
+      }
+    }
     const id = `tnt_${crypto.randomUUID()}`;
     const record: TenantRecord = {
       id,
-      slug: data.slug.toLowerCase(),
+      slug: normalizedSlug,
       name: data.name,
       legalEntityName: data.legalEntityName,
-      websiteUrl: data.websiteUrl,
+      websiteUrl: data.websiteUrl ?? null,
+      organizationType: data.organizationType ?? null,
+      organizationTypeOther: data.organizationTypeOther ?? null,
+      countryCode: data.countryCode ?? null,
+      registrationNumber: data.registrationNumber ?? null,
+      registrationAuthority: data.registrationAuthority ?? null,
+      addressLine1: data.addressLine1 ?? null,
+      addressLine2: data.addressLine2 ?? null,
+      city: data.city ?? null,
+      region: data.region ?? null,
+      postalCode: data.postalCode ?? null,
+      contactPhone: data.contactPhone ?? null,
+      adminContactPosition: data.adminContactPosition ?? null,
+      authorizedToRegisterAt: data.authorizedToRegisterAt ?? null,
       didUri: data.didUri,
       logoUrl: data.logoUrl || null,
       brandingConfig: data.brandingConfig || {},
@@ -87,8 +134,8 @@ class InMemoryTenantStore {
       acceptedAt: new Date(),
       user: {
         id: data.ownerUserId,
-        email: "owner@example.com",
-        fullName: "Organization Owner",
+        email: data.ownerEmail || "owner@example.com",
+        fullName: data.ownerFullName || "Organization Owner",
       },
     };
     this.memberships.set(id, [ownerMember]);
@@ -135,6 +182,12 @@ class InMemoryTenantStore {
       if (t.slug.toLowerCase() === slug.toLowerCase()) return t;
     }
     return null;
+  }
+
+  listAllTenants(): TenantRecord[] {
+    return Array.from(this.tenants.values()).sort(
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+    );
   }
 
   async findById(id: string): Promise<TenantRecord | null> {
@@ -265,6 +318,22 @@ class InMemoryTenantStore {
     return members.filter((m) => m.role === "ORG_OWNER").length;
   }
 
+  async transferOwnership(tenantId: string, fromUserId: string, toUserId: string): Promise<boolean> {
+    const members = this.memberships.get(tenantId) || [];
+    const target = members.find((m) => m.userId === toUserId && m.acceptedAt !== null);
+    if (!target) return false;
+
+    const current = members.find((m) => m.userId === fromUserId && m.role === "ORG_OWNER");
+    target.role = "ORG_OWNER";
+    inMemoryUserStore.updateMembershipRole(toUserId, tenantId, "ORG_OWNER");
+
+    if (current && current.userId !== toUserId) {
+      current.role = "INSTITUTION_ADMIN";
+      inMemoryUserStore.updateMembershipRole(fromUserId, tenantId, "INSTITUTION_ADMIN");
+    }
+    return true;
+  }
+
   async recordAuditLog(data: {
     tenantId?: string;
     userId?: string;
@@ -340,7 +409,13 @@ class InMemoryTenantStore {
   }
 }
 
-export const inMemoryTenantStore = new InMemoryTenantStore();
+const globalForTenantStore = globalThis as unknown as {
+  __credvailInMemoryTenantStore?: InMemoryTenantStore;
+};
+
+export const inMemoryTenantStore =
+  globalForTenantStore.__credvailInMemoryTenantStore ||
+  (globalForTenantStore.__credvailInMemoryTenantStore = new InMemoryTenantStore());
 
 export class TenantRepository {
   private forceMemory: boolean;
@@ -359,11 +434,26 @@ export class TenantRepository {
     slug: string;
     name: string;
     legalEntityName: string;
-    websiteUrl: string;
+    websiteUrl?: string | null;
+    organizationType?: string | null;
+    organizationTypeOther?: string | null;
+    countryCode?: string | null;
+    registrationNumber?: string | null;
+    registrationAuthority?: string | null;
+    addressLine1?: string | null;
+    addressLine2?: string | null;
+    city?: string | null;
+    region?: string | null;
+    postalCode?: string | null;
+    contactPhone?: string | null;
+    adminContactPosition?: string | null;
+    authorizedToRegisterAt?: Date | null;
     didUri: string;
     logoUrl?: string;
     brandingConfig?: Record<string, unknown>;
     ownerUserId: string;
+    ownerEmail?: string;
+    ownerFullName?: string;
   }): Promise<TenantRecord> {
     if (this.useMemory) {
       return inMemoryTenantStore.create(data);
@@ -374,7 +464,20 @@ export class TenantRepository {
           slug: data.slug.toLowerCase(),
           name: data.name,
           legalEntityName: data.legalEntityName,
-          websiteUrl: data.websiteUrl,
+          websiteUrl: data.websiteUrl ?? null,
+          organizationType: (data.organizationType as any) ?? null,
+          organizationTypeOther: data.organizationTypeOther ?? null,
+          countryCode: data.countryCode ?? null,
+          registrationNumber: data.registrationNumber ?? null,
+          registrationAuthority: data.registrationAuthority ?? null,
+          addressLine1: data.addressLine1 ?? null,
+          addressLine2: data.addressLine2 ?? null,
+          city: data.city ?? null,
+          region: data.region ?? null,
+          postalCode: data.postalCode ?? null,
+          contactPhone: data.contactPhone ?? null,
+          adminContactPosition: data.adminContactPosition ?? null,
+          authorizedToRegisterAt: data.authorizedToRegisterAt ?? null,
           didUri: data.didUri,
           logoUrl: data.logoUrl || null,
           brandingConfig: (data.brandingConfig as any) || {},
@@ -406,6 +509,18 @@ export class TenantRepository {
       if (data.name !== undefined) updateData.name = data.name;
       if (data.legalEntityName !== undefined) updateData.legalEntityName = data.legalEntityName;
       if (data.websiteUrl !== undefined) updateData.websiteUrl = data.websiteUrl;
+      if (data.organizationType !== undefined) updateData.organizationType = data.organizationType;
+      if (data.organizationTypeOther !== undefined) updateData.organizationTypeOther = data.organizationTypeOther;
+      if (data.countryCode !== undefined) updateData.countryCode = data.countryCode;
+      if (data.registrationNumber !== undefined) updateData.registrationNumber = data.registrationNumber;
+      if (data.registrationAuthority !== undefined) updateData.registrationAuthority = data.registrationAuthority;
+      if (data.addressLine1 !== undefined) updateData.addressLine1 = data.addressLine1;
+      if (data.addressLine2 !== undefined) updateData.addressLine2 = data.addressLine2;
+      if (data.city !== undefined) updateData.city = data.city;
+      if (data.region !== undefined) updateData.region = data.region;
+      if (data.postalCode !== undefined) updateData.postalCode = data.postalCode;
+      if (data.contactPhone !== undefined) updateData.contactPhone = data.contactPhone;
+      if (data.adminContactPosition !== undefined) updateData.adminContactPosition = data.adminContactPosition;
       if (data.logoUrl !== undefined) updateData.logoUrl = data.logoUrl;
       if (data.brandingConfig !== undefined) updateData.brandingConfig = data.brandingConfig;
       if (data.verificationStatus !== undefined) updateData.verificationStatus = data.verificationStatus;
@@ -575,6 +690,43 @@ export class TenantRepository {
     } catch (err) {
       handleRepositoryError("TenantRepository.countOwners", err);
       return inMemoryTenantStore.countOwners(tenantId);
+    }
+  }
+
+  async transferOwnership(tenantId: string, fromUserId: string, toUserId: string): Promise<boolean> {
+    if (this.useMemory) {
+      return inMemoryTenantStore.transferOwnership(tenantId, fromUserId, toUserId);
+    }
+    try {
+      return await db.$transaction(async (tx) => {
+        const target = await tx.tenantMembership.findUnique({
+          where: { tenantId_userId: { tenantId, userId: toUserId } },
+        });
+        if (!target || target.acceptedAt === null) {
+          return false;
+        }
+
+        await tx.tenantMembership.update({
+          where: { tenantId_userId: { tenantId, userId: toUserId } },
+          data: { role: "ORG_OWNER" },
+        });
+
+        if (fromUserId !== toUserId) {
+          const sender = await tx.tenantMembership.findUnique({
+            where: { tenantId_userId: { tenantId, userId: fromUserId } },
+          });
+          if (sender?.role === "ORG_OWNER") {
+            await tx.tenantMembership.update({
+              where: { tenantId_userId: { tenantId, userId: fromUserId } },
+              data: { role: "INSTITUTION_ADMIN" },
+            });
+          }
+        }
+        return true;
+      });
+    } catch (err) {
+      handleRepositoryError("TenantRepository.transferOwnership", err);
+      return inMemoryTenantStore.transferOwnership(tenantId, fromUserId, toUserId);
     }
   }
 

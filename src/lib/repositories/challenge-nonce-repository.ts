@@ -290,11 +290,29 @@ export class ChallengeNonceRepository {
   private static defaultRepo: IChallengeNonceRepository = new PrismaChallengeNonceRepository();
   private static testDouble: IChallengeNonceRepository | null = null;
 
+  private static assertTestDoubleAllowed(): void {
+    if (
+      process.env.NODE_ENV === "production" ||
+      process.env.REQUIRE_POSTGRES_INTEGRATION === "true"
+    ) {
+      throw new Error(
+        "FATAL: In-memory ChallengeNonceRepository test double is forbidden in production or strict PostgreSQL mode."
+      );
+    }
+  }
+
   static get instance(): IChallengeNonceRepository {
-    return this.testDouble || this.defaultRepo;
+    if (this.testDouble) {
+      this.assertTestDoubleAllowed();
+      return this.testDouble;
+    }
+    return this.defaultRepo;
   }
 
   static setTestDouble(repo: IChallengeNonceRepository | null): void {
+    if (repo !== null) {
+      this.assertTestDoubleAllowed();
+    }
     this.testDouble = repo;
   }
 

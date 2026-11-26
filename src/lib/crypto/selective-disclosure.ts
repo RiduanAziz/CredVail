@@ -131,4 +131,21 @@ export class SelectiveDisclosureEngine {
       error: "Unsupported custom disclosure profile. Verification requires a maintained W3C ecdsa-sd-2023 implementation.",
     };
   }
+
+  /**
+   * Reports whether interoperable W3C ecdsa-sd-2023 selective disclosure is enabled.
+   */
+  static getComplianceStatus(): {
+    standard: string;
+    supported: boolean;
+    failClosedActive: boolean;
+    requiredPackages: string[];
+  } {
+    return {
+      standard: "W3C ecdsa-sd-2023",
+      supported: false,
+      failClosedActive: true,
+      requiredPackages: ["@digitalbazaar/vc", "@digitalbazaar/ecdsa-sd-2023-cryptosuite"],
+    };
+  }
 }

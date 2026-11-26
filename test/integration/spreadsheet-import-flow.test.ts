@@ -5,6 +5,7 @@ import { TemplateService } from '@/lib/services/template-service';
 import { inMemoryTemplateStore } from '@/lib/repositories/template-repository';
 import { inMemoryTenantStore } from '@/lib/repositories/tenant-repository';
 import { AuthService } from '@/lib/services/auth-service';
+import { EmailVerificationRepository } from '@/lib/repositories/email-verification-repository';
 import { TenantService } from '@/lib/services/tenant-service';
 import { verifySessionToken, SessionPayload } from '@/lib/auth/session';
 
@@ -29,6 +30,7 @@ describe('Phase 5 End-to-End Spreadsheet Import & Recipient Validation Flow', ()
       password: 'ApexDeanPassword!2026',
       fullName: 'Dean Alice Turing',
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(aliceReg.verificationToken);
 
     const apexTenant = await tenantService.createOrganization(
       {
@@ -54,6 +56,7 @@ describe('Phase 5 End-to-End Spreadsheet Import & Recipient Validation Flow', ()
       password: 'BobCompetitorPassword!2026',
       fullName: 'Dean Bob Lovelace',
     });
+    await EmailVerificationRepository.consumeAndVerifyUser(bobReg.verificationToken);
 
     const otherTenant = await tenantService.createOrganization(
       {

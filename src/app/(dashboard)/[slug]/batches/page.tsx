@@ -405,13 +405,13 @@ Claude Shannon,cshannon@bell-labs.com,Information Theory & Cryptology,2026-11-15
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-black/[0.08] pb-6">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground font-serif">
+            <h1 className="text-3xl font-semibold tracking-[-0.025em] text-[#0F172A]">
               Spreadsheet Ingestion & Batches
             </h1>
-            <Badge variant="outline" className="border-primary/30 text-primary font-mono text-xs gap-1">
+            <Badge variant="outline" className="border-black/[0.08] bg-white text-[#475569] font-mono text-[11px] gap-1.5">
               <Sparkles className="h-3 w-3" />
               Batch Engine
             </Badge>

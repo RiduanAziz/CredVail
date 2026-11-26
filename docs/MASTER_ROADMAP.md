@@ -202,16 +202,16 @@ Do not label a credential, signature, presentation, DID, or selective-disclosure
 
 ### Work items
 
-- [ ] Standardize supported Node.js and npm versions.
-- [ ] Ensure deterministic dependency installation.
-- [ ] Validate Prisma schemas and migrations in CI.
-- [ ] Add TypeScript validation to CI.
-- [ ] Add unit-test execution to CI.
-- [ ] Add PostgreSQL integration-test execution to CI.
-- [ ] Add production-build verification to CI.
+- [x] Standardize supported Node.js and npm versions.
+- [x] Ensure deterministic dependency installation.
+- [x] Validate Prisma schemas and migrations in CI.
+- [x] Add TypeScript validation to CI.
+- [x] Add unit-test execution to CI.
+- [x] Add PostgreSQL integration-test execution to CI.
+- [x] Add production-build verification to CI.
 - [ ] Add browser E2E execution to CI.
 - [ ] Add Foundry tests for smart contracts where applicable.
-- [ ] Add dependency and secret scanning.
+- [x] Add dependency and secret scanning.
 - [ ] Configure branch protection and required checks.
 - [ ] Store test execution reports as CI artifacts.
 
@@ -243,49 +243,49 @@ This phase should be implemented as several independent vertical slices.
 
 ### 2.1 Production secrets management
 
-- [ ] Remove default production session secrets.
-- [ ] Require strong production configuration.
-- [ ] Separate session signing and issuer-key encryption secrets.
-- [ ] Introduce a supported KMS or envelope-encryption architecture.
-- [ ] Implement encryption-key rotation.
-- [ ] Validate configuration at application startup.
-- [ ] Ensure secrets are never logged or exposed to clients.
+- [x] Remove default production session secrets.
+- [x] Require strong production configuration.
+- [x] Separate session signing and issuer-key encryption secrets.
+- [x] Introduce a supported KMS or envelope-encryption architecture.
+- [x] Implement encryption-key rotation.
+- [x] Validate configuration at application startup.
+- [x] Ensure secrets are never logged or exposed to clients.
 
 ### 2.2 Database persistence and failure handling
 
-- [ ] Remove silent in-memory repository fallback in production.
-- [ ] Require configured PostgreSQL in production.
-- [ ] Ensure repository errors are surfaced as sanitized application errors.
-- [ ] Validate database initialization and migration behavior.
-- [ ] Repair invalid cryptographic-key hydration.
-- [ ] Verify transaction boundaries.
-- [ ] Verify rollback behavior.
+- [x] Remove silent in-memory repository fallback in production.
+- [x] Require configured PostgreSQL in production.
+- [x] Ensure repository errors are surfaced as sanitized application errors.
+- [x] Validate database initialization and migration behavior.
+- [x] Repair invalid cryptographic-key hydration.
+- [x] Verify transaction boundaries.
+- [x] Verify rollback behavior.
 - [ ] Test application restart and multi-instance persistence.
 
 ### 2.3 Distributed challenge and replay protection
 
-- [ ] Store challenge records in shared persistent storage.
-- [ ] Hash sensitive challenge values before persistence.
-- [ ] Bind challenges to an intended audience.
-- [ ] Enforce expiration.
-- [ ] Implement atomic one-time consumption.
-- [ ] Prevent replay across application instances.
-- [ ] Test concurrent consumers.
+- [x] Store challenge records in shared persistent storage.
+- [x] Hash sensitive challenge values before persistence.
+- [x] Bind challenges to an intended audience.
+- [x] Enforce expiration.
+- [x] Implement atomic one-time consumption.
+- [x] Prevent replay across application instances.
+- [x] Test concurrent consumers.
 
 ### 2.4 Credential claim authorization
 
-- [ ] Require proof of control of the intended recipient identity.
-- [ ] Use verified-email challenges or secure single-use invitations.
-- [ ] Enforce the database single-owner invariant.
-- [ ] Prevent consumed invitation reassignment.
-- [ ] Preserve ownership records.
-- [ ] Test concurrent claim races against live PostgreSQL.
+- [x] Require proof of control of the intended recipient identity.
+- [x] Use verified-email challenges or secure single-use invitations.
+- [x] Enforce the database single-owner invariant.
+- [x] Prevent consumed invitation reassignment.
+- [x] Preserve ownership records.
+- [x] Test concurrent claim races against live PostgreSQL.
 
 ### 2.5 Blockchain fail-closed behavior
 
-- [ ] Separate production blockchain configuration from test simulation.
-- [ ] Require an explicit live-network configuration.
-- [ ] Validate the selected chain ID.
+- [x] Separate production blockchain configuration from test simulation.
+- [x] Require an explicit live-network configuration.
+- [x] Validate the selected chain ID.
 - [ ] Verify deployed contract bytecode.
 - [ ] Validate RPC connectivity.
 - [ ] Verify transaction receipts.
@@ -322,13 +322,13 @@ This phase should be implemented as several independent vertical slices.
 
 ### 3.1 Authentication
 
-- [ ] User registration.
-- [ ] Login and logout.
-- [ ] Secure session management.
-- [ ] Password security.
-- [ ] Account recovery.
-- [ ] Session revocation.
-- [ ] Authentication abuse protection.
+- [x] User registration.
+- [x] Login and logout.
+- [x] Secure session management.
+- [x] Password security.
+- [x] Account recovery.
+- [x] Session revocation.
+- [x] Authentication abuse protection.
 
 ### 3.2 Organization onboarding
 
@@ -577,16 +577,16 @@ IMPORT REPORT
 
 ### 7.2 Batch credential issuance
 
-- [ ] Select a recipient batch.
-- [ ] Associate a template.
-- [ ] Validate every recipient.
-- [ ] Preview batch output.
-- [ ] Confirm the issuance operation.
-- [ ] Process records in controlled batches.
-- [ ] Generate individual documents.
-- [ ] Record individual issuance outcomes.
-- [ ] Support safe retry.
-- [ ] Report completed and failed items.
+- [x] Select a recipient batch.
+- [x] Associate a template.
+- [x] Validate every recipient.
+- [x] Preview batch output.
+- [x] Confirm the issuance operation.
+- [x] Process records in controlled batches.
+- [x] Generate individual documents.
+- [x] Record individual issuance outcomes.
+- [x] Support safe retry.
+- [x] Report completed and failed items.
 
 ### 7.3 Asynchronous processing architecture
 
@@ -796,20 +796,20 @@ Never return `VALID_CURRENT` when the required status snapshot or its on-chain c
 
 ### Work items
 
-- [ ] Define credential lifecycle states.
-- [ ] Implement authorized revocation.
-- [ ] Record revocation reason.
-- [ ] Maintain revocation audit events.
-- [ ] Implement the supported W3C status-list profile.
-- [ ] Publish status updates.
-- [ ] Maintain status snapshots.
-- [ ] Calculate integrity commitments.
-- [ ] Anchor applicable commitments.
-- [ ] Verify exact snapshot-to-chain consistency.
-- [ ] Enforce freshness policy.
-- [ ] Handle missing and unavailable status evidence.
-- [ ] Handle issuer-key compromise.
-- [ ] Preserve historical verification semantics.
+- [x] Define credential lifecycle states.
+- [x] Implement authorized revocation.
+- [x] Record revocation reason.
+- [x] Maintain revocation audit events.
+- [x] Implement the supported W3C status-list profile.
+- [x] Publish status updates.
+- [x] Maintain status snapshots.
+- [x] Calculate integrity commitments.
+- [x] Anchor applicable commitments.
+- [x] Verify exact snapshot-to-chain consistency.
+- [x] Enforce freshness policy.
+- [x] Handle missing and unavailable status evidence.
+- [x] Handle issuer-key compromise.
+- [x] Preserve historical verification semantics.
 
 ### Lifecycle state model
 
@@ -852,11 +852,11 @@ Actual lifecycle states must be separated from verification results. For example
 - [ ] Review transaction replay protection.
 - [ ] Review chain and network selection.
 - [ ] Verify contract bytecode.
-- [ ] Validate transaction receipts.
-- [ ] Implement durable transaction monitoring.
-- [ ] Implement retry and failure recovery.
-- [ ] Store actual transaction evidence.
-- [ ] Verify anchored commitments.
+- [x] Validate transaction receipts.
+- [x] Implement durable transaction monitoring.
+- [x] Implement retry and failure recovery.
+- [x] Store actual transaction evidence.
+- [x] Verify anchored commitments.
 - [ ] Test event and receipt consistency.
 - [ ] Evaluate mainnet migration requirements.
 
@@ -903,12 +903,12 @@ Use it selectively for commitments and evidence that benefit from independent pu
 
 ### Reporting
 
-- [ ] CSV exports.
-- [ ] PDF reports.
-- [ ] Date-range filters.
-- [ ] Organization filters.
-- [ ] Permission-based access.
-- [ ] Report generation audit events.
+- [x] CSV exports.
+- [x] PDF reports.
+- [x] Date-range filters.
+- [x] Organization filters.
+- [x] Permission-based access.
+- [x] Report generation audit events.
 
 **Exit criteria:** Authorized organization administrators can reconstruct relevant credential operations and review meaningful operational metrics.
 
@@ -953,27 +953,27 @@ A feature becomes enabled only after cryptographic correctness, standards compat
 
 ### Organization subscription management
 
-- [ ] Define subscription plans.
-- [ ] Define credential issuance quotas.
-- [ ] Define storage and processing limits.
-- [ ] Implement usage metering.
-- [ ] Implement subscription lifecycle.
+- [x] Define subscription plans.
+- [x] Define credential issuance quotas.
+- [x] Define storage and processing limits.
+- [x] Implement usage metering.
+- [x] Implement subscription lifecycle.
 - [ ] Implement billing integration.
 - [ ] Implement invoice history.
-- [ ] Implement plan upgrades and downgrades.
-- [ ] Implement account suspension policies.
+- [x] Implement plan upgrades and downgrades.
+- [x] Implement account suspension policies.
 - [ ] Implement usage notifications.
 
 ### Platform administration
 
-- [ ] Organization management.
-- [ ] Organization verification workflow.
-- [ ] Account administration.
-- [ ] Platform configuration.
-- [ ] Subscription oversight.
-- [ ] Usage monitoring.
+- [x] Organization management.
+- [x] Organization verification workflow.
+- [x] Account administration.
+- [x] Platform configuration.
+- [x] Subscription oversight.
+- [x] Usage monitoring.
 - [ ] Abuse monitoring.
-- [ ] Operational status monitoring.
+- [x] Operational status monitoring.
 
 **Exit criteria:** Commercial organizations can onboard, subscribe, operate within their plans, and receive transparent usage information.
 
@@ -1000,38 +1000,38 @@ A feature becomes enabled only after cryptographic correctness, standards compat
 
 ### Observability
 
-- [ ] Centralized structured logging.
+- [x] Centralized structured logging.
 - [ ] Application error monitoring.
-- [ ] Request tracing.
+- [x] Request tracing.
 - [ ] Database performance monitoring.
-- [ ] Background job monitoring.
-- [ ] Blockchain transaction monitoring.
-- [ ] Verification latency metrics.
-- [ ] Security event monitoring.
+- [x] Background job monitoring.
+- [x] Blockchain transaction monitoring.
+- [x] Verification latency metrics.
+- [x] Security event monitoring.
 
 ### Disaster recovery
 
-- [ ] Database backup policy.
+- [x] Database backup policy.
 - [ ] Backup restoration tests.
-- [ ] Document recovery.
-- [ ] Key backup and rotation procedures.
-- [ ] Recovery-point objectives.
-- [ ] Recovery-time objectives.
-- [ ] Incident response procedures.
-- [ ] Security incident escalation.
+- [x] Document recovery.
+- [x] Key backup and rotation procedures.
+- [x] Recovery-point objectives.
+- [x] Recovery-time objectives.
+- [x] Incident response procedures.
+- [x] Security incident escalation.
 
 ### Production acceptance
 
 - [ ] Independent security assessment.
 - [ ] Dependency audit.
-- [ ] Tenant-isolation testing.
-- [ ] Authorization testing.
-- [ ] Concurrency testing.
-- [ ] Performance testing.
+- [x] Tenant-isolation testing.
+- [x] Authorization testing.
+- [x] Concurrency testing.
+- [x] Performance testing.
 - [ ] Browser compatibility testing.
 - [ ] Accessibility review.
 - [ ] Production backup restoration test.
-- [ ] Operational runbook.
+- [x] Operational runbook.
 - [ ] Release approval.
 
 **Exit criteria:** Production deployment can be operated, monitored, recovered, and securely maintained.

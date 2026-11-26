@@ -1,14 +1,24 @@
 import { db } from "../db.ts";
 import type { PlatformRole, TenantRole } from "../../types/index.ts";
 import { handleRepositoryError, isInMemoryFallbackPermissible } from "../db/persistence-policy.ts";
+import { ensureDevSuperAdminSeeded } from "../auth/dev-super-admin-bootstrap.ts";
 
 export interface UserRecord {
   id: string;
   email: string;
   passwordHash: string;
   fullName: string;
+  preferredDisplayName?: string | null;
+  jobTitle?: string | null;
+  phoneNumber?: string | null;
   avatarUrl: string | null;
   platformRole: PlatformRole;
+  emailVerifiedAt?: Date | null;
+  termsAcceptedAt?: Date | null;
+  privacyAcceptedAt?: Date | null;
+  termsVersion?: string | null;
+  privacyVersion?: string | null;
+  marketingOptIn?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,20 +44,70 @@ class InMemoryUserStore {
   private users: Map<string, UserRecord> = new Map();
   private memberships: Map<string, Array<{ tenantId: string; role: TenantRole; acceptedAt?: Date | null; tenant: any }>> = new Map();
 
-  async create(data: { email: string; passwordHash: string; fullName: string; platformRole?: PlatformRole }): Promise<UserRecord> {
+  async create(data: {
+    email: string;
+    passwordHash: string;
+    fullName: string;
+    platformRole?: PlatformRole;
+    preferredDisplayName?: string | null;
+    jobTitle?: string | null;
+    phoneNumber?: string | null;
+    termsAcceptedAt?: Date | null;
+    privacyAcceptedAt?: Date | null;
+    termsVersion?: string | null;
+    privacyVersion?: string | null;
+    marketingOptIn?: boolean;
+    emailVerifiedAt?: Date | null;
+  }): Promise<UserRecord> {
+    const normalizedEmail = data.email.trim().toLowerCase();
+    for (const u of this.users.values()) {
+      if (u.email.toLowerCase() === normalizedEmail) {
+        throw new Error("A user with this email address already exists");
+      }
+    }
     const id = `usr_${crypto.randomUUID()}`;
     const record: UserRecord = {
       id,
-      email: data.email.toLowerCase(),
+      email: normalizedEmail,
       passwordHash: data.passwordHash,
       fullName: data.fullName,
+      preferredDisplayName: data.preferredDisplayName ?? null,
+      jobTitle: data.jobTitle ?? null,
+      phoneNumber: data.phoneNumber ?? null,
       avatarUrl: null,
       platformRole: data.platformRole || "USER",
+      emailVerifiedAt: data.emailVerifiedAt ?? null,
+      termsAcceptedAt: data.termsAcceptedAt ?? null,
+      privacyAcceptedAt: data.privacyAcceptedAt ?? null,
+      termsVersion: data.termsVersion ?? null,
+      privacyVersion: data.privacyVersion ?? null,
+      marketingOptIn: data.marketingOptIn ?? false,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     this.users.set(id, record);
     return record;
+  }
+
+  deleteUser(userId: string): void {
+    this.users.delete(userId);
+    this.memberships.delete(userId);
+  }
+
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (!user) return false;
+    user.passwordHash = passwordHash;
+    user.updatedAt = new Date();
+    return true;
+  }
+
+  async markEmailVerified(userId: string, verifiedAt: Date): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (!user) return false;
+    user.emailVerifiedAt = verifiedAt;
+    user.updatedAt = new Date();
+    return true;
   }
 
   async findByEmail(email: string): Promise<UserRecord | null> {
@@ -114,7 +174,13 @@ class InMemoryUserStore {
   }
 }
 
-export const inMemoryUserStore = new InMemoryUserStore();
+const globalForUserStore = globalThis as unknown as {
+  __credvailInMemoryUserStore?: InMemoryUserStore;
+};
+
+export const inMemoryUserStore =
+  globalForUserStore.__credvailInMemoryUserStore ||
+  (globalForUserStore.__credvailInMemoryUserStore = new InMemoryUserStore());
 
 export class UserRepository {
   private forceMemory: boolean;
@@ -134,6 +200,15 @@ export class UserRepository {
     passwordHash: string;
     fullName: string;
     platformRole?: PlatformRole;
+    preferredDisplayName?: string | null;
+    jobTitle?: string | null;
+    phoneNumber?: string | null;
+    termsAcceptedAt?: Date | null;
+    privacyAcceptedAt?: Date | null;
+    termsVersion?: string | null;
+    privacyVersion?: string | null;
+    marketingOptIn?: boolean;
+    emailVerifiedAt?: Date | null;
   }): Promise<UserRecord> {
     if (this.useMemory) {
       return inMemoryUserStore.create(data);
@@ -141,10 +216,19 @@ export class UserRepository {
     try {
       return (await db.user.create({
         data: {
-          email: data.email.toLowerCase(),
+          email: data.email.trim().toLowerCase(),
           passwordHash: data.passwordHash,
           fullName: data.fullName,
+          preferredDisplayName: data.preferredDisplayName ?? null,
+          jobTitle: data.jobTitle ?? null,
+          phoneNumber: data.phoneNumber ?? null,
           platformRole: data.platformRole || "USER",
+          emailVerifiedAt: data.emailVerifiedAt ?? null,
+          termsAcceptedAt: data.termsAcceptedAt ?? null,
+          privacyAcceptedAt: data.privacyAcceptedAt ?? null,
+          termsVersion: data.termsVersion ?? null,
+          privacyVersion: data.privacyVersion ?? null,
+          marketingOptIn: data.marketingOptIn ?? false,
         },
       })) as UserRecord;
     } catch (err) {
@@ -155,6 +239,7 @@ export class UserRepository {
 
   async findByEmail(email: string): Promise<UserRecord | null> {
     if (this.useMemory) {
+      await ensureDevSuperAdminSeeded();
       return inMemoryUserStore.findByEmail(email);
     }
     try {
@@ -207,6 +292,38 @@ export class UserRepository {
     } catch (err) {
       handleRepositoryError("UserRepository.findWithMemberships", err);
       return inMemoryUserStore.findWithMemberships(id);
+    }
+  }
+
+  async updatePasswordHash(userId: string, passwordHash: string): Promise<boolean> {
+    if (this.useMemory) {
+      return inMemoryUserStore.updatePasswordHash(userId, passwordHash);
+    }
+    try {
+      await db.user.update({
+        where: { id: userId },
+        data: { passwordHash },
+      });
+      return true;
+    } catch (err) {
+      handleRepositoryError("UserRepository.updatePasswordHash", err);
+      return inMemoryUserStore.updatePasswordHash(userId, passwordHash);
+    }
+  }
+
+  async markEmailVerified(userId: string, verifiedAt: Date = new Date()): Promise<boolean> {
+    if (this.useMemory) {
+      return inMemoryUserStore.markEmailVerified(userId, verifiedAt);
+    }
+    try {
+      await db.user.update({
+        where: { id: userId },
+        data: { emailVerifiedAt: verifiedAt },
+      });
+      return true;
+    } catch (err) {
+      handleRepositoryError("UserRepository.markEmailVerified", err);
+      return inMemoryUserStore.markEmailVerified(userId, verifiedAt);
     }
   }
 }

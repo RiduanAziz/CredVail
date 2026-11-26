@@ -45,48 +45,100 @@ enum CredentialState {
   REVOKED
 }
 
+enum OrganizationType {
+  UNIVERSITY
+  COLLEGE
+  SCHOOL
+  TRAINING_CENTER
+  PROFESSIONAL_ASSOCIATION
+  NGO
+  GOVERNMENT
+  ENTERPRISE
+  CLUB
+  OTHER
+}
+
 model User {
-  id                 String             @id @default(uuid())
-  email              String             @unique
-  passwordHash       String
-  fullName           String
-  avatarUrl          String?
-  platformRole       PlatformRole       @default(USER)
-  emailVerifiedAt    DateTime?
-  twoFactorSecret    String?
-  memberships        TenantMembership[]
-  claimInvitations   ClaimInvitation[]
-  auditLogs          AuditLog[]
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+  id                      String                   @id @default(uuid())
+  email                   String                   @unique
+  passwordHash            String
+  fullName                String
+  preferredDisplayName    String?
+  jobTitle                String?
+  phoneNumber             String?
+  avatarUrl               String?
+  platformRole            PlatformRole             @default(USER)
+  emailVerifiedAt         DateTime?
+  termsAcceptedAt         DateTime?
+  privacyAcceptedAt       DateTime?
+  termsVersion            String?
+  privacyVersion          String?
+  marketingOptIn          Boolean                  @default(false)
+  twoFactorSecret         String?
+  memberships             TenantMembership[]
+  claimInvitations        ClaimInvitation[]
+  emailVerificationTokens EmailVerificationToken[]
+  auditLogs               AuditLog[]
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 
   @@map("users")
 }
 
-model Tenant {
-  id                 String             @id @default(uuid())
-  slug               String             @unique
-  name               String
-  legalEntityName    String
-  websiteUrl         String
-  didUri             String             @unique
-  logoUrl            String?
-  brandingConfig     Json               @default("{}")
-  verificationStatus VerificationStatus @default(PENDING)
-  
-  memberships        TenantMembership[]
-  issuerKeys         IssuerKey[]
-  templates          CertificateTemplate[]
-  recipients         Recipient[]
-  batches            IssuanceBatch[]
-  credentials        CredentialRecord[]
-  statusSnapshots    StatusSnapshot[]
-  claimInvitations   ClaimInvitation[]
-  auditLogs          AuditLog[]
-  
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
+model EmailVerificationToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
 
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
+}
+
+model Tenant {
+  id                       String             @id @default(uuid())
+  slug                     String             @unique
+  name                     String
+  legalEntityName          String
+  websiteUrl               String?
+  organizationType         OrganizationType?
+  organizationTypeOther    String?
+  countryCode              String?
+  registrationNumber       String?
+  registrationAuthority    String?
+  addressLine1             String?
+  addressLine2             String?
+  city                     String?
+  region                   String?
+  postalCode               String?
+  contactPhone             String?
+  adminContactPosition     String?
+  authorizedToRegisterAt   DateTime?
+  didUri                   String             @unique
+  logoUrl                  String?
+  brandingConfig           Json               @default("{}")
+  verificationStatus       VerificationStatus @default(PENDING)
+  
+  memberships              TenantMembership[]
+  issuerKeys               IssuerKey[]
+  templates                CertificateTemplate[]
+  recipients               Recipient[]
+  batches                  IssuanceBatch[]
+  credentials              CredentialRecord[]
+  statusSnapshots          StatusSnapshot[]
+  claimInvitations         ClaimInvitation[]
+  auditLogs                AuditLog[]
+  
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  @@index([countryCode])
+  @@index([organizationType])
   @@map("tenants")
 }
 

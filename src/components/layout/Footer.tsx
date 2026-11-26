@@ -7,9 +7,18 @@ import { Github, FileText, CheckCircle2, ShieldCheck, LockKeyhole } from "lucide
 
 export function Footer() {
   const pathname = usePathname();
-  const publicRoute = ["/", "/login", "/register", "/verify", "/wallet", "/claim"].some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  );
+  const publicRoute = [
+    "/",
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/verify",
+    "/wallet",
+    "/claim",
+    "/admin",
+  ].some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
   if (!publicRoute) return null;
 
@@ -26,8 +35,8 @@ export function Footer() {
                 height={30}
                 className="h-7.5 w-7.5 rounded-lg object-contain"
               />
-              <span className="text-white">
-                CRED<span className="bg-brand-gradient bg-clip-text text-transparent font-black">VAIL</span>
+              <span className="font-sans text-white font-bold tracking-tight">
+                CREDVAIL
               </span>
             </div>
             <p className="text-xs text-blue-100/65 leading-relaxed">

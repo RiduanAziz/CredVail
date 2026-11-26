@@ -64,15 +64,35 @@ export interface AnchorResult {
   explorerUrl: string;
 }
 
+export interface TransactionReceiptStatus {
+  txHash: string;
+  status: "PENDING" | "CONFIRMED" | "REVERTED" | "NOT_FOUND";
+  blockNumber: number | null;
+  confirmations: number;
+  isSimulated: boolean;
+  explorerUrl: string;
+  checkedAt: string;
+}
+
+export class BlockchainConfigurationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BlockchainConfigurationError";
+  }
+}
+
 export class BlockchainService {
   public static readonly SEPOLIA_CHAIN_ID = 11155111;
   public static readonly EXPLORER_URL = "https://sepolia.etherscan.io";
+  private static readonly DEFAULT_MOCK_CONTRACT = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+  private static readonly ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
   // Simulated in-memory EVM state store for hermetic testing
   private static simulatedBlockNumber = 7123450;
   private static simulatedBatches = new Map<string, BatchRecord>(); // `${tenantHash}:${batchHash}` => BatchRecord
   private static simulatedKeys = new Map<string, IssuerKeyRecord>(); // `${tenantHash}:${epoch}` => IssuerKeyRecord
   private static simulatedStatusDigests = new Map<string, StatusDigestRecord>(); // `${tenantHash}:${statusEpoch}` => StatusDigestRecord
+  private static simulatedReceipts = new Map<string, { blockNumber: number; status: "CONFIRMED" | "REVERTED"; timestamp: number }>();
 
   /**
    * Resets simulated EVM state for test isolation.
@@ -82,6 +102,7 @@ export class BlockchainService {
     this.simulatedBatches.clear();
     this.simulatedKeys.clear();
     this.simulatedStatusDigests.clear();
+    this.simulatedReceipts.clear();
   }
 
   /**
@@ -129,9 +150,74 @@ export class BlockchainService {
    * Checks whether the service is running in simulated mode.
    */
   public static isSimulationMode(): boolean {
+    if (process.env.ALLOW_BLOCKCHAIN_SIMULATION === "true") {
+      return true;
+    }
     const privateKey = process.env.DEPLOYER_PRIVATE_KEY;
     const forceLive = process.env.FORCE_SEPOLIA_LIVE === "true";
     return !forceLive || !privateKey || privateKey.trim() === "";
+  }
+
+  /**
+   * Validates that production environments do not silently fall back to blockchain simulation
+   * unless ALLOW_BLOCKCHAIN_SIMULATION="true" is explicitly set.
+   */
+  public static assertLiveBlockchainConfigured(): void {
+    const isProd =
+      process.env.NODE_ENV === "production" &&
+      process.env.NEXT_PHASE !== "phase-production-build";
+    if (!isProd || process.env.ALLOW_BLOCKCHAIN_SIMULATION === "true") {
+      return;
+    }
+
+    if (process.env.FORCE_SEPOLIA_LIVE !== "true") {
+      throw new BlockchainConfigurationError(
+        "FATAL: Production blockchain operations require FORCE_SEPOLIA_LIVE=true (or explicit ALLOW_BLOCKCHAIN_SIMULATION=true)."
+      );
+    }
+
+    const privateKey = process.env.DEPLOYER_PRIVATE_KEY?.trim();
+    if (!privateKey || !/^0x[0-9a-fA-F]{64}$/.test(privateKey)) {
+      throw new BlockchainConfigurationError(
+        "FATAL: DEPLOYER_PRIVATE_KEY must be a valid 32-byte hex private key in production live Sepolia mode."
+      );
+    }
+
+    const addr = process.env.NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS?.trim();
+    if (
+      !addr ||
+      !addr.startsWith("0x") ||
+      addr.length !== 42 ||
+      addr.toLowerCase() === this.ZERO_ADDRESS.toLowerCase() ||
+      addr.toLowerCase() === this.DEFAULT_MOCK_CONTRACT.toLowerCase()
+    ) {
+      throw new BlockchainConfigurationError(
+        "FATAL: NEXT_PUBLIC_REGISTRY_CONTRACT_ADDRESS must be a deployed Sepolia registry contract in production."
+      );
+    }
+  }
+
+  /**
+   * Validates that the target EVM chain ID matches Ethereum Sepolia (or explicit override).
+   */
+  public static validateChainId(chainId: number = this.SEPOLIA_CHAIN_ID): boolean {
+    if (chainId !== this.SEPOLIA_CHAIN_ID) {
+      throw new BlockchainConfigurationError(
+        `Invalid EVM chain ID ${chainId}. Expected Ethereum Sepolia (${this.SEPOLIA_CHAIN_ID}).`
+      );
+    }
+    return true;
+  }
+
+  /**
+   * Guards simulated execution paths against silent fallback in production.
+   */
+  private static useSimulation(): boolean {
+    if (this.isSimulationMode()) {
+      this.assertLiveBlockchainConfigured();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -170,7 +256,7 @@ export class BlockchainService {
       throw new Error("CredvailRegistry: Leaf count must be positive");
     }
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${batchHash}`;
       if (this.simulatedBatches.has(storageKey)) {
         throw new Error("CredvailRegistry: Batch already anchored");
@@ -191,6 +277,12 @@ export class BlockchainService {
       const txHash = keccak256(
         toHex(`anchorBatch:${tenantHash}:${batchHash}:${formattedRoot}:${this.simulatedBlockNumber}`)
       );
+
+      this.simulatedReceipts.set(txHash.toLowerCase(), {
+        blockNumber: this.simulatedBlockNumber,
+        status: "CONFIRMED",
+        timestamp,
+      });
 
       return {
         txHash,
@@ -241,7 +333,7 @@ export class BlockchainService {
     const tenantHash = this.computeTenantHash(tenantSlug);
     const batchHash = this.computeBatchHash(batchId);
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${batchHash}`;
       return this.simulatedBatches.get(storageKey) || null;
     }
@@ -286,7 +378,7 @@ export class BlockchainService {
     const formattedLeaf = this.formatBytes32(leafHash);
     const formattedProof = proof.map((p) => this.formatBytes32(p));
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${batchHash}`;
       const batch = this.simulatedBatches.get(storageKey);
       if (!batch || !batch.exists) return false;
@@ -340,7 +432,7 @@ export class BlockchainService {
     const vFrom = validFrom ?? Math.floor(Date.now() / 1000);
     const vTo = validTo ?? 0;
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${epoch}`;
       if (this.simulatedKeys.has(storageKey)) {
         throw new Error("CredvailRegistry: Key epoch already exists");
@@ -438,7 +530,7 @@ export class BlockchainService {
       throw new Error("CredvailRegistry: New epoch must be greater than old epoch");
     }
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const oldStorageKey = `${tenantHash}:${oldEpoch}`;
       const newStorageKey = `${tenantHash}:${newEpoch}`;
 
@@ -515,7 +607,7 @@ export class BlockchainService {
 
     const tenantHash = this.computeTenantHash(tenantSlug);
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${epoch}`;
       const record = this.simulatedKeys.get(storageKey);
       if (!record || !record.exists) {
@@ -578,7 +670,7 @@ export class BlockchainService {
   public static async getIssuerKey(tenantSlug: string, epoch: number): Promise<IssuerKeyRecord | null> {
     const tenantHash = this.computeTenantHash(tenantSlug);
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${epoch}`;
       return this.simulatedKeys.get(storageKey) || null;
     }
@@ -640,7 +732,7 @@ export class BlockchainService {
     const tenantHash = this.computeTenantHash(tenantSlug);
     const digestBytes = this.formatBytes32(digestSha256);
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${statusEpoch}`;
       if (this.simulatedStatusDigests.has(storageKey)) {
         throw new Error("CredvailRegistry: Status epoch already exists");
@@ -706,7 +798,7 @@ export class BlockchainService {
   public static async getStatusDigest(tenantSlug: string, statusEpoch: number): Promise<StatusDigestRecord | null> {
     const tenantHash = this.computeTenantHash(tenantSlug);
 
-    if (this.isSimulationMode()) {
+    if (this.useSimulation()) {
       const storageKey = `${tenantHash}:${statusEpoch}`;
       return this.simulatedStatusDigests.get(storageKey) || null;
     }
@@ -734,5 +826,152 @@ export class BlockchainService {
     } catch {
       return null;
     }
+  }
+
+  // ============================================================================
+  // TRANSACTION RECEIPT MONITORING & IDEMPOTENT ANCHOR RECOVERY
+  // ============================================================================
+
+  /**
+   * Inspects the confirmation status and receipt for a submitted transaction hash.
+   */
+  public static async getTransactionReceiptStatus(
+    txHash: string,
+    requiredConfirmations: number = 1
+  ): Promise<TransactionReceiptStatus> {
+    if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+      throw new BlockchainConfigurationError("Invalid transaction hash format.");
+    }
+
+    const explorerUrl = `${this.EXPLORER_URL}/tx/${txHash}`;
+    const checkedAt = new Date().toISOString();
+
+    if (this.useSimulation()) {
+      const sim = this.simulatedReceipts.get(txHash.toLowerCase());
+      if (!sim) {
+        return {
+          txHash,
+          status: "NOT_FOUND",
+          blockNumber: null,
+          confirmations: 0,
+          isSimulated: true,
+          explorerUrl,
+          checkedAt,
+        };
+      }
+      const confirmations = Math.max(1, this.simulatedBlockNumber - sim.blockNumber + 1);
+      return {
+        txHash,
+        status: sim.status === "REVERTED" ? "REVERTED" : confirmations >= requiredConfirmations ? "CONFIRMED" : "PENDING",
+        blockNumber: sim.blockNumber,
+        confirmations,
+        isSimulated: true,
+        explorerUrl,
+        checkedAt,
+      };
+    }
+
+    try {
+      const publicClient = createPublicClient({
+        chain: sepolia,
+        transport: http(this.getRpcUrl()),
+      });
+      const receipt = await publicClient.getTransactionReceipt({ hash: txHash as Hash });
+      const latestBlock = await publicClient.getBlockNumber();
+      const confirmations = Number(latestBlock - receipt.blockNumber) + 1;
+      const status =
+        receipt.status === "reverted"
+          ? "REVERTED"
+          : confirmations >= requiredConfirmations
+          ? "CONFIRMED"
+          : "PENDING";
+
+      return {
+        txHash,
+        status,
+        blockNumber: Number(receipt.blockNumber),
+        confirmations,
+        isSimulated: false,
+        explorerUrl,
+        checkedAt,
+      };
+    } catch {
+      return {
+        txHash,
+        status: "PENDING",
+        blockNumber: null,
+        confirmations: 0,
+        isSimulated: false,
+        explorerUrl,
+        checkedAt,
+      };
+    }
+  }
+
+  /**
+   * Anchors a batch idempotently with bounded retry recovery.
+   * Prevents duplicate on-chain submissions if the batch or txHash is already confirmed.
+   */
+  public static async anchorBatchWithRetry(
+    tenantSlug: string,
+    batchId: string,
+    merkleRoot: string,
+    leafCount: number,
+    options?: { maxAttempts?: number; existingTxHash?: string | null }
+  ): Promise<AnchorResult & { attemptCount: number; alreadyAnchored: boolean }> {
+    const existingBatch = await this.getBatch(tenantSlug, batchId);
+    if (existingBatch && existingBatch.exists) {
+      return {
+        txHash:
+          options?.existingTxHash ||
+          keccak256(toHex(`alreadyAnchored:${tenantSlug}:${batchId}:${existingBatch.merkleRoot}`)),
+        blockNumber: this.simulatedBlockNumber,
+        timestamp: existingBatch.anchoredAtBlockTimestamp,
+        explorerUrl: options?.existingTxHash
+          ? `${this.EXPLORER_URL}/tx/${options.existingTxHash}`
+          : `${this.EXPLORER_URL}/address/${this.getContractAddress()}`,
+        attemptCount: 0,
+        alreadyAnchored: true,
+      };
+    }
+
+    if (options?.existingTxHash) {
+      const receipt = await this.getTransactionReceiptStatus(options.existingTxHash);
+      if (receipt.status === "CONFIRMED") {
+        return {
+          txHash: receipt.txHash,
+          blockNumber: receipt.blockNumber || this.simulatedBlockNumber,
+          timestamp: Math.floor(Date.now() / 1000),
+          explorerUrl: receipt.explorerUrl,
+          attemptCount: 0,
+          alreadyAnchored: true,
+        };
+      }
+    }
+
+    const maxAttempts = Math.max(1, Math.min(options?.maxAttempts ?? 3, 5));
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await this.anchorBatch(tenantSlug, batchId, merkleRoot, leafCount);
+        return {
+          ...res,
+          attemptCount: attempt,
+          alreadyAnchored: false,
+        };
+      } catch (err) {
+        lastErr = err;
+        if (err instanceof BlockchainConfigurationError) {
+          throw err;
+        }
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, 25 * attempt));
+        }
+      }
+    }
+
+    throw lastErr instanceof Error
+      ? lastErr
+      : new Error("Failed to anchor batch after retry attempts.");
   }
 }
